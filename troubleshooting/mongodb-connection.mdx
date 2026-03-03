@@ -1,0 +1,323 @@
+---
+title: MongoDB Connection Issues
+description: Troubleshoot MongoDB Atlas connection problems
+---
+
+## Overview
+
+The Resume Generator uses MongoDB for data persistence. This guide helps you resolve common MongoDB connection issues, particularly with MongoDB Atlas.
+
+---
+
+## Connection Configuration
+
+The database connection is handled in `backend/src/config/database.js:5-15` and initialized in `backend/server.js:5`.
+
+<Note>
+  The application uses Mongoose to connect to MongoDB with the connection string from the `MONGO_URI` environment variable.
+</Note>
+
+---
+
+## Common Connection Errors
+
+<AccordionGroup>
+  <Accordion title="MongooseServerSelectionError: Could not connect to any servers">
+    **Cause:** MongoDB server is unreachable. Common reasons include:
+    - Incorrect connection string
+    - IP not whitelisted in MongoDB Atlas
+    - Network connectivity issues
+    - Firewall blocking connection
+
+    **Solutions:**
+
+    ### 1. Verify Connection String
+    Check your `backend/.env` file:
+    ```env
+    MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/database?retryWrites=true&w=majority
+    ```
+
+    Common mistakes:
+    - Missing protocol (`mongodb+srv://`)
+    - Incorrect cluster URL
+    - Missing database name
+    - Special characters in password not URL-encoded
+
+    ### 2. Whitelist Your IP Address (MongoDB Atlas)
+    <Warning>
+      **Most common issue:** Your IP address is not whitelisted in MongoDB Atlas.
+    </Warning>
+
+    **Steps:**
+    1. Go to [MongoDB Atlas](https://cloud.mongodb.com/)
+    2. Select your project
+    3. Navigate to **Network Access** (left sidebar)
+    4. Click **IP Access List**
+    5. Click **Add IP Address**
+    6. Options:
+       - **Add Current IP Address** (for your current IP)
+       - **Allow Access from Anywhere** (`0.0.0.0/0`) - for development only
+       - Add specific IP addresses for production
+
+    <Warning>
+      Using `0.0.0.0/0` (anywhere) is convenient for development but **not recommended for production** as it allows connections from any IP address.
+    </Warning>
+
+    ### 3. Check Cluster Status
+    - Ensure your MongoDB Atlas cluster is running (not paused)
+    - Free tier clusters pause after inactivity
+    - Resume the cluster from the Atlas dashboard if paused
+
+    ### 4. Test Connection
+    After whitelisting, restart your backend:
+    ```bash
+    cd backend
+    npm run dev
+    ```
+
+    You should see: `"Connected to Database"`
+  </Accordion>
+
+  <Accordion title="MongoServerError: Authentication failed">
+    **Error Message:** `"bad auth: Authentication failed"`
+
+    **Cause:** Incorrect database username or password.
+
+    **Solutions:**
+
+    ### 1. Verify Database User Credentials
+    1. Go to MongoDB Atlas → **Database Access**
+    2. Check your database username exists
+    3. If password is incorrect, edit the user and reset password
+
+    ### 2. Update Connection String
+    In `backend/.env`:
+    ```env
+    MONGO_URI=mongodb+srv://YOUR_USERNAME:YOUR_PASSWORD@cluster.mongodb.net/database
+    ```
+
+    Replace:
+    - `YOUR_USERNAME` with your database username (not your Atlas login email)
+    - `YOUR_PASSWORD` with your database password
+
+    ### 3. URL-Encode Special Characters
+    If your password contains special characters, they must be URL-encoded:
+
+    | Character | Encoded |
+    |-----------|----------|
+    | `@`       | `%40`    |
+    | `:`       | `%3A`    |
+    | `/`       | `%2F`    |
+    | `?`       | `%3F`    |
+    | `#`       | `%23`    |
+    | `&`       | `%26`    |
+
+    **Example:**
+    - Password: `P@ssw0rd!`
+    - Encoded: `P%40ssw0rd!`
+
+    Or use Node.js to encode:
+    ```javascript
+    encodeURIComponent('P@ssw0rd!')
+    ```
+
+    ### 4. Restart Backend
+    ```bash
+    cd backend
+    npm run dev
+    ```
+  </Accordion>
+
+  <Accordion title="MongoParseError: Invalid connection string">
+    **Cause:** The `MONGO_URI` format is incorrect.
+
+    **Solutions:**
+
+    ### Correct Format for MongoDB Atlas:
+    ```env
+    MONGO_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/<database>?retryWrites=true&w=majority
+    ```
+
+    ### Components:
+    - **Protocol:** `mongodb+srv://` (for Atlas) or `mongodb://` (for local)
+    - **Username:** Your database user
+    - **Password:** URL-encoded password
+    - **Cluster:** Your cluster hostname (e.g., `cluster0.abc123.mongodb.net`)
+    - **Database:** Your database name (optional, defaults to `test`)
+    - **Options:** Query parameters for connection settings
+
+    ### Get Connection String from Atlas:
+    1. Go to MongoDB Atlas → **Database**
+    2. Click **Connect** on your cluster
+    3. Choose **Connect your application**
+    4. Copy the connection string
+    5. Replace `<password>` with your actual password
+    6. Replace `<database>` with your database name (or use `test`)
+
+    ### Common Mistakes:
+    - Missing `://` after protocol
+    - Spaces in the connection string
+    - Quotes around the connection string in `.env` file (not needed)
+    - Using MongoDB Compass connection string instead of application string
+  </Accordion>
+
+  <Accordion title="Environment variable not loaded">
+    **Symptom:** Backend logs show `undefined` for `process.env.MONGO_URI`
+
+    **Cause:** `.env` file is missing, in wrong location, or not loaded.
+
+    **Solutions:**
+
+    ### 1. Verify .env File Location
+    The `.env` file must be in the `backend/` directory:
+    ```
+    project-root/
+    ├── backend/
+    │   ├── .env          ← Should be here
+    │   ├── server.js
+    │   └── package.json
+    └── frontend/
+    ```
+
+    ### 2. Check .env File Contents
+    `backend/.env` should contain:
+    ```env
+    MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/database
+    JWT_SECRET=your_jwt_secret
+    GOOGLE_GENAI_API_KEY=your_gemini_api_key
+    ```
+
+    ### 3. Verify dotenv is Loaded
+    Check `backend/server.js:1` contains:
+    ```javascript
+    require("dotenv").config()
+    ```
+
+    ### 4. Restart Backend
+    Environment variables are loaded at startup:
+    ```bash
+    cd backend
+    npm run dev
+    ```
+
+    <Note>
+      If you change `.env` values, you **must restart** the backend server for changes to take effect.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Connection timeout">
+    **Error:** `"Server selection timed out after 30000 ms"`
+
+    **Cause:** Cannot reach MongoDB server within timeout period.
+
+    **Solutions:**
+
+    ### 1. Check Internet Connection
+    - Ensure you have active internet connection
+    - Test connectivity: `ping cluster0.abc123.mongodb.net`
+
+    ### 2. Verify Firewall Settings
+    - Corporate/university firewalls may block MongoDB ports (27017)
+    - Try from a different network
+    - Contact network administrator if on restricted network
+
+    ### 3. Check VPN
+    - Some VPNs block database connections
+    - Try disconnecting VPN or whitelisting VPN IP in Atlas
+
+    ### 4. Verify Cluster Region
+    - Choose cluster region closest to your location for better latency
+    - Check Atlas dashboard for cluster status
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Local MongoDB Setup
+
+If you prefer using a local MongoDB instance instead of Atlas:
+
+### 1. Install MongoDB Locally
+```bash
+# macOS
+brew install mongodb-community
+
+# Ubuntu/Debian
+sudo apt-get install mongodb
+
+# Windows
+# Download from https://www.mongodb.com/try/download/community
+```
+
+### 2. Start MongoDB Service
+```bash
+# macOS
+brew services start mongodb-community
+
+# Linux
+sudo systemctl start mongodb
+
+# Windows
+# MongoDB runs as a service after installation
+```
+
+### 3. Update Connection String
+`backend/.env`:
+```env
+MONGO_URI=mongodb://localhost:27017/resume-generator
+```
+
+### 4. Verify Connection
+```bash
+# Test connection
+mongo
+# or
+mongosh
+```
+
+---
+
+## Database Connection Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Security" icon="shield-halved">
+    - Use strong passwords for database users
+    - Whitelist only necessary IP addresses
+    - Never commit `.env` files to version control
+    - Rotate credentials if exposed
+  </Card>
+  <Card title="Performance" icon="gauge-high">
+    - Choose cluster region near your application
+    - Use connection pooling (handled by Mongoose)
+    - Monitor connection errors in production
+    - Set appropriate timeout values
+  </Card>
+</CardGroup>
+
+---
+
+## Verification Checklist
+
+Before seeking further help, verify:
+
+- [ ] `.env` file exists in `backend/` directory
+- [ ] `MONGO_URI` is correctly formatted
+- [ ] Database username and password are correct
+- [ ] Special characters in password are URL-encoded
+- [ ] Your IP is whitelisted in MongoDB Atlas Network Access
+- [ ] MongoDB Atlas cluster is running (not paused)
+- [ ] Backend server is restarted after changing `.env`
+- [ ] You see "Connected to Database" in console
+
+---
+
+## Additional Resources
+
+<CardGroup cols={2}>
+  <Card title="Common Issues" icon="circle-exclamation" href="/troubleshooting/common-issues">
+    General troubleshooting for JWT, file uploads, and more
+  </Card>
+  <Card title="MongoDB Atlas Docs" icon="book" href="https://www.mongodb.com/docs/atlas/">
+    Official MongoDB Atlas documentation
+  </Card>
+</CardGroup>

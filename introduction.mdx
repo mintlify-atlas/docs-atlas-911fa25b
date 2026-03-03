@@ -1,0 +1,153 @@
+---
+title: Introduction
+description: AI-powered interview preparation tool that analyzes job descriptions and generates personalized interview reports
+---
+
+## Welcome to Resume Generator
+
+Resume Generator is an intelligent interview preparation platform that leverages Google's Gemini AI to help job seekers ace their interviews. Upload your resume and target job description to receive a comprehensive interview strategy tailored specifically for you.
+
+<CardGroup cols={2}>
+  <Card title="Smart analysis" icon="brain">
+    AI-powered matching that compares your profile against job requirements and calculates a compatibility score
+  </Card>
+  <Card title="Interview questions" icon="comments">
+    Get both technical and behavioral questions you're likely to face, with detailed answer strategies
+  </Card>
+  <Card title="Skill gap analysis" icon="chart-line">
+    Identify areas where your profile falls short and understand the severity of each gap
+  </Card>
+  <Card title="Preparation roadmap" icon="calendar">
+    Receive a day-by-day preparation plan with specific tasks to maximize your interview readiness
+  </Card>
+</CardGroup>
+
+## How it works
+
+The platform combines resume parsing, natural language processing, and AI-driven analysis to create actionable interview preparation reports.
+
+<Steps>
+  <Step title="Upload your information">
+    Provide a job description along with either your resume (PDF/DOCX) or a self-description of your experience
+  </Step>
+  <Step title="AI analysis">
+    Google Gemini analyzes the job requirements against your profile using structured data extraction with Zod schemas
+  </Step>
+  <Step title="Receive your report">
+    Get a comprehensive interview report including match score, predicted questions, skill gaps, and a preparation timeline
+  </Step>
+  <Step title="Export tailored resume">
+    Generate an ATS-friendly resume PDF optimized for the specific job using Puppeteer
+  </Step>
+</Steps>
+
+## Key features
+
+### Multi-format resume parsing
+
+The backend uses `pdf-parse` for PDF files and `mammoth` for DOCX files to extract text. If local parsing fails (e.g., scanned PDFs), the system falls back to sending the raw file directly to Gemini's multimodal API.
+
+```javascript
+const isPdfMagic = b.length >= 4 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46
+const isZipMagic = b.length >= 4 && b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04
+```
+
+Source: backend/src/controllers/interview.controller.js:45-47
+
+### Structured AI responses
+
+The application uses Zod schemas with `zod-to-json-schema` to ensure AI responses conform to expected data structures:
+
+```javascript
+const interviewReportSchema = z.object({
+  matchScore: z.number().describe("A score between 0 and 100"),
+  technicalQuestions: z.array(z.object({
+    question: z.string(),
+    intention: z.string(),
+    answer: z.string()
+  })),
+  behavioralQuestions: z.array(z.object({
+    question: z.string(),
+    intention: z.string(),
+    answer: z.string()
+  })),
+  skillGaps: z.array(z.object({
+    skill: z.string(),
+    severity: z.enum(["low", "medium", "high"])
+  })),
+  preparationPlan: z.array(z.object({
+    day: z.number(),
+    focus: z.string(),
+    tasks: z.array(z.string())
+  }))
+})
+```
+
+Source: backend/src/services/ai.service.js:11-33
+
+### Resume PDF generation
+
+Generate professionally formatted, ATS-friendly resume PDFs tailored to specific job descriptions using Puppeteer for HTML-to-PDF conversion.
+
+```javascript
+const browser = await puppeteer.launch()
+const page = await browser.newPage()
+await page.setContent(htmlContent, { waitUntil: "networkidle0" })
+
+const pdfBuffer = await page.pdf({
+  format: "A4",
+  margin: {
+    top: "20mm",
+    bottom: "20mm",
+    left: "15mm",
+    right: "15mm"
+  }
+})
+```
+
+Source: backend/src/services/ai.service.js:79-92
+
+## Tech stack
+
+<CardGroup cols={2}>
+  <Card title="Frontend" icon="react">
+    - **React 19.2** with Vite for fast development
+    - **React Router 7** for client-side routing
+    - **Axios** for API communication
+    - **Sass** for styling
+  </Card>
+  <Card title="Backend" icon="server">
+    - **Node.js** with Express 5
+    - **MongoDB** with Mongoose ODM
+    - **JWT** authentication with httpOnly cookies
+    - **Google Gemini AI** via @google/genai
+  </Card>
+  <Card title="File processing" icon="file">
+    - **Multer** for multipart/form-data uploads
+    - **pdf-parse** for PDF text extraction
+    - **mammoth** for DOCX parsing
+    - **Puppeteer** for PDF generation
+  </Card>
+  <Card title="Data validation" icon="shield-check">
+    - **Zod** for runtime type validation
+    - **zod-to-json-schema** for AI response schemas
+    - **bcryptjs** for password hashing
+  </Card>
+</CardGroup>
+
+## Architecture
+
+The application follows a modern full-stack architecture:
+
+- **Frontend**: React SPA running on `http://localhost:5173` with context-based state management
+- **Backend**: RESTful API on `http://localhost:3000` with JWT-based authentication
+- **Database**: MongoDB for storing user accounts and interview reports
+- **AI Integration**: Google Gemini (gemini-3-flash-preview model) for intelligent content generation
+
+<Note>
+  The frontend and backend run as separate processes. CORS is configured to allow credentials from the Vite dev server.
+</Note>
+
+## What's next?
+
+Ready to get started? Follow our [quickstart guide](/quickstart) to generate your first interview report, or check out the detailed [installation instructions](/installation) to set up the development environment.

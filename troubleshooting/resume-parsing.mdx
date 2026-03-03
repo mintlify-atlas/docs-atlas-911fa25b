@@ -1,0 +1,375 @@
+---
+title: Resume Parsing Issues
+description: Resolve PDF and DOCX resume parsing errors
+---
+
+## Overview
+
+The Resume Generator extracts text from uploaded resume files (PDF and DOCX) for AI processing. This guide helps you troubleshoot parsing errors and file format issues.
+
+---
+
+## How Resume Parsing Works
+
+The parsing logic is implemented in `backend/src/controllers/interview.controller.js:38-84`:
+
+1. **File Type Detection** - Uses magic bytes (file signatures), MIME type, and file extension
+2. **Text Extraction** - PDF files use `pdf-parse`, DOCX files use `mammoth`
+3. **Fallback Strategy** - If local parsing fails, sends original file to Google Gemini AI
+4. **Error Handling** - Returns clear error messages for unsupported or unreadable files
+
+<Note>
+  The application accepts files up to **5MB** in size (`backend/src/middlewares/file.middleware.js:6-8`).
+</Note>
+
+---
+
+## Common Parsing Errors
+
+<AccordionGroup>
+  <Accordion title="Unable to read the uploaded PDF">
+    **Error Message:** `"Unable to read the uploaded resume. Please upload a valid PDF/DOCX or provide 'selfDescription'."`
+
+    **Error Location:** `backend/src/controllers/interview.controller.js:79-82`
+
+    **Causes:**
+    - Scanned PDF (image-only, no text layer)
+    - Encrypted/password-protected PDF
+    - Corrupted PDF file
+    - Non-standard PDF format
+
+    **Solutions:**
+
+    ### 1. Check if PDF is Scanned (Image-Only)
+    Scanned PDFs contain images of text, not actual text:
+    - Try selecting text in the PDF - if you can't select it, it's scanned
+    - Use OCR (Optical Character Recognition) to convert to text-based PDF:
+      - Adobe Acrobat: Tools → Scan & OCR → Recognize Text
+      - Online tools: [Smallpdf OCR](https://smallpdf.com/ocr-pdf), [Adobe Online](https://www.adobe.com/acrobat/online/pdf-ocr.html)
+
+    ### 2. Remove Password Protection
+    - Open PDF in Adobe Reader or Preview
+    - If prompted for password, unlock it
+    - Save as new unencrypted PDF
+    - Upload the new file
+
+    ### 3. Re-export/Re-save the PDF
+    - Open the PDF in your PDF reader
+    - Print to PDF or Save As → PDF
+    - This often fixes corruption issues
+
+    ### 4. Convert from DOCX
+    If you have the original Word document:
+    - Upload the `.docx` file directly (better parsing)
+    - Or export fresh PDF from Word: File → Save As → PDF
+
+    ### 5. Use Self Description Instead
+    If the file cannot be parsed, provide your information manually:
+    ```javascript
+    formData.append('selfDescription', `
+      Experienced Software Engineer with 5 years in full-stack development.
+      Skills: React, Node.js, Python, AWS, MongoDB
+      Previous roles: Senior Developer at TechCorp, Developer at StartupXYZ
+      Education: BS Computer Science, State University
+    `);
+    ```
+
+    <Note>
+      **Fallback Behavior:** If local parsing fails but the file format is valid (PDF/DOCX), the application sends the original file to Google Gemini AI, which may successfully extract text even from scanned documents.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Could not extract text from the resume file">
+    **Error Message:** `"Could not extract text from the resume file. Please upload a text-based PDF/DOCX or provide 'selfDescription'."`
+
+    **Error Location:** `backend/src/controllers/interview.controller.js:86-90`
+
+    **Cause:** The PDF/DOCX was parsed successfully, but no text was extracted (completely empty file or only images).
+
+    **Solutions:**
+
+    ### 1. Verify File Has Content
+    - Open the file and ensure it contains text
+    - Check it's not just a blank page or image
+
+    ### 2. Check for Image-Only Content
+    - If resume is just images/graphics without text, it won't extract
+    - Recreate resume with actual text, not images of text
+
+    ### 3. Export from Original Source
+    - If created in Canva, LinkedIn, or design tools:
+      - Use export options that preserve text
+      - Or manually type content into Word/Google Docs
+
+    ### 4. Use Self Description
+    Provide the resume content as text:
+    ```javascript
+    formData.append('selfDescription', 'Your resume content here...');
+    ```
+  </Accordion>
+
+  <Accordion title="Unsupported resume file type">
+    **Error Message:** `"Unsupported resume file type. Please upload a PDF or DOCX."`
+
+    **Error Location:** `backend/src/controllers/interview.controller.js:62-66`
+
+    **Cause:** The uploaded file is not a PDF or DOCX format.
+
+    **Detection Logic** (`backend/src/controllers/interview.controller.js:44-53`):
+    ```javascript
+    // Magic bytes (file signature) - most reliable
+    const isPdfMagic = b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 // %PDF
+    const isZipMagic = b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04 // PK..
+    
+    // Also checks MIME type and file extension
+    const isPdf = isPdfMagic || mime === "application/pdf" || name.endsWith(".pdf")
+    const isDocx = isZipMagic || mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || name.endsWith(".docx")
+    ```
+
+    **Supported Formats:**
+    - ✅ PDF (`.pdf`)
+    - ✅ Microsoft Word 2007+ (`.docx`)
+
+    **Unsupported Formats:**
+    - ❌ Old Word format (`.doc`) - convert to `.docx`
+    - ❌ Text files (`.txt`) - copy content to `selfDescription`
+    - ❌ Images (`.jpg`, `.png`) - use OCR first or create text document
+    - ❌ Rich Text Format (`.rtf`) - convert to `.docx` or `.pdf`
+    - ❌ Google Docs - export as `.docx` or `.pdf` first
+
+    **Solutions:**
+
+    ### Convert to Supported Format:
+
+    **From .doc (Old Word):**
+    - Open in Microsoft Word
+    - File → Save As → Word Document (`.docx`)
+
+    **From Google Docs:**
+    - File → Download → Microsoft Word (`.docx`)
+    - Or File → Download → PDF Document (`.pdf`)
+
+    **From .rtf:**
+    - Open in word processor
+    - Save As → `.docx` or export to PDF
+
+    **From Images:**
+    - Use OCR tool to extract text
+    - Create new document with extracted text
+    - Save as `.docx` or `.pdf`
+  </Accordion>
+
+  <Accordion title="File size exceeds limit">
+    **Symptom:** Upload fails or times out, no specific error message.
+
+    **Cause:** File exceeds 5MB size limit.
+
+    **Limit Configuration:** `backend/src/middlewares/file.middleware.js:6-8`
+    ```javascript
+    limits: {
+      fileSize: 5 * 1024 * 1024 // 5MB
+    }
+    ```
+
+    **Solutions:**
+
+    ### 1. Compress PDF
+    - Online tools: [Smallpdf Compress](https://smallpdf.com/compress-pdf), [iLovePDF](https://www.ilovepdf.com/compress_pdf)
+    - Adobe Acrobat: File → Save As Other → Reduced Size PDF
+    - Preview (Mac): File → Export → Reduce File Size
+
+    ### 2. Reduce DOCX Size
+    - Compress images in document:
+      - Select image → Format → Compress Pictures
+      - Choose "Email (96 ppi)" or "Web (150 ppi)"
+    - Remove unnecessary formatting
+    - Delete embedded objects
+
+    ### 3. Simplify Resume
+    - Remove high-resolution images/photos
+    - Use simple formatting instead of complex graphics
+    - Consider text-only version for parsing
+
+    ### 4. Split Information
+    - Upload simplified resume file
+    - Add detailed information in `selfDescription` field:
+      ```javascript
+      formData.append('resume', smallerFile);
+      formData.append('selfDescription', 'Additional details not in resume...');
+      ```
+  </Accordion>
+
+  <Accordion title="DOCX parsing errors">
+    **Error:** Various errors when uploading DOCX files
+
+    **Parser Used:** `mammoth` library (`backend/src/controllers/interview.controller.js:60-61`)
+
+    **Common Issues:**
+
+    ### 1. Complex Formatting
+    - Heavily formatted documents may not parse correctly
+    - Solution: Simplify formatting before upload
+
+    ### 2. Tables and Columns
+    - Complex table structures may lose formatting
+    - Solution: Convert tables to simple bullet points
+
+    ### 3. Embedded Objects
+    - Charts, SmartArt, embedded files may cause issues
+    - Solution: Remove or replace with text descriptions
+
+    ### 4. Track Changes/Comments
+    - Documents with tracked changes may not parse cleanly
+    - Solution: Accept all changes before saving
+      - Review → Accept → Accept All Changes
+
+    ### 5. Old .doc Format
+    - `.doc` files are not supported (only `.docx`)
+    - Solution: Save As → `.docx` format
+
+    **Best Practices for DOCX:**
+    - Use simple, clean formatting
+    - Avoid complex layouts (multiple columns, text boxes)
+    - Stick to standard fonts and styles
+    - Remove headers/footers if possible
+    - Save in latest Word format (`.docx`)
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## AI Fallback Processing
+
+When local parsing fails, the application uses an intelligent fallback:
+
+**Fallback Logic** (`backend/src/controllers/interview.controller.js:67-83`):
+```javascript
+catch (err) {
+  // If local parsing fails, send original file to Gemini AI
+  if (aiMimeType) {
+    resumeFileForAi = {
+      mimeType: aiMimeType,
+      data: req.file.buffer.toString("base64")
+    }
+    resumeText = ""
+  }
+}
+```
+
+**Benefits:**
+- Google Gemini can often read scanned PDFs (with OCR)
+- Handles encrypted or complex formatted documents
+- Provides better parsing for image-heavy resumes
+- Graceful degradation - tries local parsing first, then AI
+
+**Limitations:**
+- Requires valid PDF or DOCX file
+- Still needs `selfDescription` if file is completely unreadable
+- May be slower than local parsing
+
+---
+
+## Best Resume File Practices
+
+<CardGroup cols={2}>
+  <Card title="Format" icon="file-pdf">
+    - Use PDF or DOCX format
+    - Ensure text is selectable (not scanned)
+    - Keep file size under 5MB
+    - Use standard fonts
+  </Card>
+  <Card title="Content" icon="file-lines">
+    - Use simple, clean formatting
+    - Avoid complex tables/columns
+    - Don't embed large images
+    - Save from original source (Word, Google Docs)
+  </Card>
+</CardGroup>
+
+---
+
+## Testing Your Resume File
+
+### Quick Test Checklist:
+
+1. **Can you select text?**
+   - Open PDF and try highlighting text
+   - If you can't select text → it's scanned, use OCR
+
+2. **Is it under 5MB?**
+   - Check file properties
+   - If over 5MB → compress file
+
+3. **Is it .pdf or .docx?**
+   - Check file extension
+   - If not → convert to supported format
+
+4. **Does it open normally?**
+   - Open in PDF reader or Word
+   - No password prompts or errors?
+
+5. **Is formatting simple?**
+   - Mostly text with basic formatting
+   - Not heavy on images/graphics
+
+---
+
+## Alternative: Self Description
+
+If you continue to have parsing issues, you can provide resume information as text:
+
+```javascript
+const formData = new FormData();
+
+// Option 1: Resume file only
+formData.append('resume', file);
+
+// Option 2: Self description only (no file upload needed)
+formData.append('selfDescription', `
+Software Engineer | 5 Years Experience
+
+Skills:
+- Frontend: React, Vue.js, TypeScript, HTML/CSS
+- Backend: Node.js, Express, Python, Django
+- Database: MongoDB, PostgreSQL, Redis
+- Cloud: AWS, Docker, Kubernetes
+
+Experience:
+- Senior Developer, TechCorp (2021-Present)
+  - Led team of 5 developers on e-commerce platform
+  - Improved performance by 40% through optimization
+  - Implemented CI/CD pipeline with GitHub Actions
+
+- Full Stack Developer, StartupXYZ (2019-2021)
+  - Built React-based admin dashboard from scratch
+  - Developed RESTful APIs serving 100k+ daily users
+  - Reduced server costs by 30% through AWS optimization
+
+Education:
+- BS Computer Science, State University (2019)
+- GPA: 3.8/4.0
+`);
+
+// Option 3: Both (recommended for best results)
+formData.append('resume', file);
+formData.append('selfDescription', 'Additional context or highlights...');
+
+formData.append('jobDescription', 'Job posting text...');
+```
+
+<Note>
+  Providing both a resume file AND self description gives the AI the most context and typically produces the best interview reports.
+</Note>
+
+---
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Common Issues" icon="circle-question" href="/troubleshooting/common-issues">
+    General troubleshooting including auth, API, and validation errors
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/interview/create-report">
+    Detailed API documentation for interview report generation
+  </Card>
+</CardGroup>

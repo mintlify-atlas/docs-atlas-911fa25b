@@ -1,0 +1,115 @@
+---
+title: 'List Interview Reports'
+api: 'GET /api/interview/'
+---
+
+Retrieve all interview reports for the authenticated user, sorted by creation date (newest first).
+
+## Authentication
+
+This endpoint requires authentication. Include the JWT token in the Authorization header:
+
+```
+Authorization: Bearer <token>
+```
+
+## Example Request
+
+```bash
+curl -X GET https://api.example.com/api/interview/ \
+  -H "Authorization: Bearer <token>"
+```
+
+```javascript
+fetch('https://api.example.com/api/interview/', {
+  method: 'GET',
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+```
+
+## Response
+
+<ResponseField name="message" type="string">
+  Success message indicating the interview reports were fetched successfully.
+</ResponseField>
+
+<ResponseField name="interviewReports" type="array">
+  Array of interview report summary objects, sorted by creation date (newest first).
+  
+  <Expandable title="interviewReports[]">
+    <ResponseField name="_id" type="string">
+      Unique identifier for the interview report.
+    </ResponseField>
+    
+    <ResponseField name="user" type="string">
+      User ID of the report owner.
+    </ResponseField>
+    
+    <ResponseField name="title" type="string">
+      Job title for the position.
+    </ResponseField>
+    
+    <ResponseField name="matchScore" type="number">
+      A score between 0 and 100 indicating how well the candidate's profile matches the job description.
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp when the report was created.
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp when the report was last updated.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Success Response (200 OK)
+
+```json
+{
+  "message": "Interview reports fetched successfully.",
+  "interviewReports": [
+    {
+      "_id": "507f1f77bcf86cd799439011",
+      "user": "507f191e810c19729de860ea",
+      "title": "Senior Software Engineer",
+      "matchScore": 85,
+      "createdAt": "2026-03-03T10:30:00.000Z",
+      "updatedAt": "2026-03-03T10:30:00.000Z"
+    },
+    {
+      "_id": "507f1f77bcf86cd799439012",
+      "user": "507f191e810c19729de860ea",
+      "title": "Full Stack Developer",
+      "matchScore": 78,
+      "createdAt": "2026-03-02T15:20:00.000Z",
+      "updatedAt": "2026-03-02T15:20:00.000Z"
+    },
+    {
+      "_id": "507f1f77bcf86cd799439013",
+      "user": "507f191e810c19729de860ea",
+      "title": "Frontend Engineer",
+      "matchScore": 92,
+      "createdAt": "2026-03-01T09:15:00.000Z",
+      "updatedAt": "2026-03-01T09:15:00.000Z"
+    }
+  ]
+}
+```
+
+## Error Responses
+
+### 401 Unauthorized
+
+Returned when the authentication token is missing or invalid.
+
+## Notes
+
+- This endpoint returns a lightweight summary of each report, excluding large text fields for better performance:
+  - **Excluded fields:** `resume`, `selfDescription`, `jobDescription`, `technicalQuestions`, `behavioralQuestions`, `skillGaps`, `preparationPlan`, `__v`
+  - To get the full report details, use the [Get Interview Report](/api/interview/get-report) endpoint with the specific report ID
+- Reports are automatically sorted by creation date in descending order (newest first)
+- The endpoint only returns reports belonging to the authenticated user
+- If the user has no reports, an empty array is returned

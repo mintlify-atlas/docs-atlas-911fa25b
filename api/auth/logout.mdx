@@ -1,0 +1,84 @@
+---
+title: 'Logout User'
+api: 'GET /api/auth/logout'
+description: 'Logout the current user and invalidate their session'
+---
+
+## Description
+
+Logs out the current user by clearing the JWT token cookie and adding the token to a blacklist to prevent reuse. This endpoint can be called even without an active session.
+
+## Request
+
+No request body or query parameters required. The JWT token is read from the `token` cookie automatically.
+
+## Response
+
+<ResponseField name="message" type="string">
+  Success message indicating the user logged out successfully
+</ResponseField>
+
+### Success Response (200)
+
+```json
+{
+  "message": "User logged out successfully"
+}
+```
+
+The server performs the following actions:
+1. Clears the `token` cookie from the client
+2. Adds the token to a blacklist database to prevent reuse
+3. Returns a success message
+
+<Note>
+  This endpoint returns a 200 status even if no token cookie is present, making it safe to call in any state.
+</Note>
+
+## Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://api.example.com/api/auth/logout \
+  -b cookies.txt \
+  -c cookies.txt
+```
+
+```javascript JavaScript
+const response = await fetch('/api/auth/logout', {
+  method: 'GET',
+  credentials: 'include' // Important: Include cookies
+});
+
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+session = requests.Session()
+# Assuming session already has the authentication cookie
+
+response = session.get('https://api.example.com/api/auth/logout')
+data = response.json()
+```
+</CodeGroup>
+
+## Implementation Details
+
+- No authentication middleware required (public endpoint)
+- The token cookie is automatically cleared by the server
+- If a token exists, it's added to a blacklist collection in the database
+- Blacklisted tokens cannot be used for authentication, even if they haven't expired
+- Safe to call multiple times or without an active session
+- Returns success (200) regardless of whether a token was present
+
+## Security Considerations
+
+<Warning>
+  After logout, the JWT token is blacklisted. Even if an attacker obtains the old token, it cannot be used to authenticate requests.
+</Warning>
+
+<Info>
+  The blacklist mechanism ensures that tokens cannot be reused after logout, providing an additional layer of security beyond simple cookie deletion.
+</Info>

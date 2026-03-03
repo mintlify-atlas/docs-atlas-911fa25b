@@ -1,80 +1,283 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get up and running with Resume Generator in under 5 minutes
 ---
 
-## Get started in three steps
+## Prerequisites
 
-Get your documentation site running locally and make your first customization.
+Before you begin, ensure you have:
 
-### Step 1: Set up your local environment
+- Node.js (LTS version recommended)
+- A MongoDB database (MongoDB Atlas free tier or local instance)
+- A Google Gemini API key ([get one here](https://ai.google.dev/))
+
+## Setup in 4 steps
+
+<Steps>
+  <Step title="Clone and install dependencies">
+    Clone the repository and install packages for both frontend and backend:
+
+    ```bash
+    git clone <repository-url>
+    cd resume-generator
+
+    # Install backend dependencies
+    cd backend
+    npm install
+
+    # Install frontend dependencies
+    cd ../frontend
+    npm install
+    ```
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env` file in the `backend/` directory with your credentials:
+
+    ```env
+    MONGO_URI=your_mongodb_connection_string
+    JWT_SECRET=your_long_random_secret
+    GOOGLE_GENAI_API_KEY=your_gemini_api_key
+    ```
+
+    <Warning>
+      Never commit your `.env` file to version control. If you accidentally expose your API keys, rotate them immediately.
+    </Warning>
+
+    **Getting your MongoDB URI:**
+    - For MongoDB Atlas: Navigate to your cluster → Connect → Connect your application → Copy the connection string
+    - For local MongoDB: Use `mongodb://localhost:27017/resume-generator`
+
+    **Generating a JWT secret:**
+    ```bash
+    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+    ```
+  </Step>
+
+  <Step title="Start the development servers">
+    Open two terminal windows and start both servers:
+
+    **Terminal 1 - Backend:**
+    ```bash
+    cd backend
+    npm run dev
+    ```
+
+    The API server will start at `http://localhost:3000`
+
+    **Terminal 2 - Frontend:**
+    ```bash
+    cd frontend
+    npm run dev
+    ```
+
+    The React app will start at `http://localhost:5173`
+
+    <Note>
+      The backend uses nodemon for hot reloading, so changes to server code will automatically restart the server.
+    </Note>
+  </Step>
+
+  <Step title="Create your account">
+    1. Open `http://localhost:5173` in your browser
+    2. Click **Register** to create a new account
+    3. Enter your email and password (minimum 6 characters)
+    4. You'll be automatically logged in after registration
+
+    The authentication system uses JWT tokens stored in httpOnly cookies for security:
+
+    ```javascript
+    app.use(cors({
+      origin: "http://localhost:5173",
+      credentials: true
+    }))
+    ```
+
+    Source: backend/src/app.js:9-12
+  </Step>
+</Steps>
+
+## Generate your first interview report
+
+Now that you're set up, let's create your first interview report:
+
+<Steps>
+  <Step title="Prepare your materials">
+    You'll need:
+    - A job description (paste the full text from a job posting)
+    - Either a resume file (PDF or DOCX) **OR** a self-description
+
+    <Note>
+      For best results, upload a text-based PDF or DOCX resume. Scanned/image-only PDFs may not parse correctly, though the system will attempt to send them directly to Gemini as a fallback.
+    </Note>
+  </Step>
+
+  <Step title="Submit the form">
+    On the home page:
+
+    1. **Paste the job description** in the left panel (required)
+    2. **Upload your resume** (PDF/DOCX, max 5MB) in the right panel, **OR**
+    3. **Write a self-description** if you don't have a resume ready
+    4. Click **Generate My Interview Strategy**
+
+    The form validates your input:
+    ```javascript
+    if (!jobDescription.trim()) {
+      window.alert("Please paste the job description first.")
+      return
+    }
+    if (!resumeFile && !selfDescription.trim()) {
+      window.alert("Please upload a resume (PDF/DOCX) or fill in the self description.")
+      return
+    }
+    ```
+
+    Source: frontend/src/features/interview/pages/Home.jsx:17-24
+  </Step>
+
+  <Step title="Wait for AI analysis">
+    The system will:
+    1. Extract text from your resume (if provided)
+    2. Send your profile and job description to Google Gemini
+    3. Generate a structured interview report with match score, questions, skill gaps, and preparation plan
+
+    This typically takes 20-30 seconds. You'll see a loading screen:
+    ```jsx
+    <main className='loading-screen'>
+      <h1>Loading your interview plan...</h1>
+    </main>
+    ```
+
+    Behind the scenes, the API makes this call:
+    ```javascript
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: zodToJsonSchema(interviewReportSchema)
+      }
+    })
+    ```
+
+    Source: backend/src/services/ai.service.js:63-70
+  </Step>
+
+  <Step title="Review your report">
+    Your interview report includes:
+
+    - **Match Score**: A 0-100 score indicating how well your profile fits the role
+    - **Technical Questions**: Role-specific questions with interviewer intentions and answer strategies
+    - **Behavioral Questions**: Soft-skill questions with suggested response frameworks
+    - **Skill Gaps**: Areas where your profile doesn't fully meet requirements, ranked by severity (low/medium/high)
+    - **Preparation Plan**: A day-by-day roadmap with specific tasks to prepare effectively
+
+    All reports are stored in MongoDB and accessible from your dashboard:
+    ```javascript
+    const interviewReport = await interviewReportModel.create({
+      user: req.user.id,
+      resume: resumeText,
+      selfDescription: resolvedSelfDescription,
+      ...interViewReportByAi,
+      title: resolvedTitle,
+      jobDescription: resolvedJobDescription
+    })
+    ```
+
+    Source: backend/src/controllers/interview.controller.js:109-117
+  </Step>
+
+  <Step title="Export your tailored resume (optional)">
+    From the interview report page, you can generate a tailored resume PDF optimized for the specific job:
+
+    1. Click the **Generate Resume PDF** button
+    2. The system will create an ATS-friendly HTML resume using AI
+    3. Convert it to PDF using Puppeteer
+    4. Download the file
+
+    The generated resume:
+    - Highlights relevant experience for the target role
+    - Uses professional formatting with subtle color accents
+    - Is optimized for Applicant Tracking Systems (ATS)
+    - Fits within 1-2 pages
+
+    API endpoint:
+    ```javascript
+    POST /api/interview/resume/pdf/:interviewReportId
+    ```
+
+    Source: backend/src/controllers/interview.controller.js:172-193
+  </Step>
+</Steps>
+
+## Common issues
 
 <AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
+  <Accordion title="MongoDB connection failed">
+    **Error:** `MongoServerError: bad auth`
+
+    **Solutions:**
+    - Verify your `MONGO_URI` in `.env` includes the correct username and password
+    - For MongoDB Atlas, whitelist your IP address:
+      1. Go to Network Access in Atlas
+      2. Click "Add IP Address"
+      3. Either add your current IP or use `0.0.0.0/0` for development (not recommended for production)
+    - Ensure your MongoDB cluster is running
   </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
+
+  <Accordion title="JWT authentication error">
+    **Error:** `secretOrPrivateKey must have a value`
+
+    **Solution:**
+    - Ensure `JWT_SECRET` is set in `backend/.env`
+    - Restart the backend server after adding the environment variable
+    - The secret should be at least 32 characters long for security
+  </Accordion>
+
+  <Accordion title="Cannot read uploaded resume">
+    **Error:** `Unable to read the uploaded PDF`
+
+    **Causes:**
+    - The PDF is image-based (scanned document without text layer)
+    - The PDF is encrypted or password-protected
+    - The file is corrupted
+
+    **Solutions:**
+    - Re-export your resume as a text-based PDF from Word or Google Docs
+    - Convert the PDF to DOCX and try uploading that instead
+    - Use the "Quick Self-Description" field as a fallback
+
+    The system attempts a fallback:
+    ```javascript
+    // If local parsing fails, send raw file to Gemini
+    if (aiMimeType) {
+      resumeFileForAi = {
+        mimeType: aiMimeType,
+        data: req.file.buffer.toString("base64")
+      }
+    }
+    ```
+
+    Source: backend/src/controllers/interview.controller.js:70-75
+  </Accordion>
+
+  <Accordion title="CORS errors in browser console">
+    **Error:** `Access to XMLHttpRequest blocked by CORS policy`
+
+    **Solution:**
+    - Ensure both servers are running on the correct ports (backend: 3000, frontend: 5173)
+    - Check that the frontend is making requests to `http://localhost:3000`
+    - Verify CORS is configured with credentials in `backend/src/app.js`
   </Accordion>
 </AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Installation guide" icon="download" href="/installation">
+    Detailed setup instructions for development and production environments
+  </Card>
+  <Card title="Authentication API" icon="key" href="/api/auth/register">
+    Complete documentation of all backend endpoints and request/response schemas
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

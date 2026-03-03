@@ -1,0 +1,471 @@
+---
+title: Interview Reports
+description: AI-powered interview preparation reports with match scoring, question generation, skill gap analysis, and personalized preparation plans
+---
+
+## Overview
+
+The Interview Report feature uses Google's Gemini AI to analyze job descriptions against user profiles (resume or self-description) and generate comprehensive interview preparation reports. Each report includes a match score, tailored interview questions with model answers, skill gap analysis, and a day-by-day preparation roadmap.
+
+## User Workflow
+
+### Creating an Interview Report
+
+Users can generate interview reports from the home page by providing:
+
+<CardGroup cols={2}>
+  <Card title="Job Description" icon="briefcase">
+    **Required** - The target job posting (up to 5000 characters)
+  </Card>
+  <Card title="Resume File" icon="file-pdf">
+    **Optional** - PDF or DOCX resume upload (recommended for best results)
+  </Card>
+  <Card title="Self Description" icon="user">
+    **Optional** - Text description of experience and skills (if no resume)
+  </Card>
+</CardGroup>
+
+<Note>
+Either a resume file OR self-description is required. Uploading a resume provides the most accurate results.
+</Note>
+
+**User Journey:**
+
+1. Navigate to home page
+2. Paste job description in left panel (required)
+3. Upload resume (PDF/DOCX) OR fill self-description in right panel
+4. Click "Generate My Interview Strategy"
+5. Wait ~30 seconds for AI processing
+6. Redirected to detailed interview report page
+
+```jsx Home.jsx:15-29
+const handleGenerateReport = async () => {
+    const resumeFile = resumeInputRef.current.files[ 0 ]
+    if (!jobDescription.trim()) {
+        window.alert("Please paste the job description first.")
+        return
+    }
+    if (!resumeFile && !selfDescription.trim()) {
+        window.alert("Please upload a resume (PDF/DOCX) or fill in the self description.")
+        return
+    }
+    const data = await generateReport({ jobDescription, selfDescription, resumeFile })
+    if (data?._id) {
+        navigate(`/interview/${data._id}`)
+    }
+}
+```
+
+## API Endpoint
+
+**Generate Interview Report:** `POST /api/interview/`
+
+**Authentication:** Required (JWT token)
+
+**Content-Type:** `multipart/form-data`
+
+**Request Parameters:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `jobDescription` | string | Yes | The job posting description |
+| `resume` | file | No* | PDF or DOCX resume file |
+| `selfDescription` | string | No* | Text description of candidate profile |
+| `title` | string | No | Job title (derived from job description if not provided) |
+
+*Either `resume` or `selfDescription` must be provided.
+
+## Backend Processing Flow
+
+### 1. Resume File Processing
+
+The system supports PDF and DOCX files with intelligent format detection:
+
+```javascript interview.controller.js:40-84
+let resumeText = ""
+if (req.file?.buffer) {
+    const mime = (req.file.mimetype || "").toLowerCase()
+    const name = (req.file.originalname || "").toLowerCase()
+
+    // Prefer "magic bytes" over mimetype/extension
+    const b = req.file.buffer
+    const isPdfMagic = b.length >= 4 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 // %PDF
+    const isZipMagic = b.length >= 4 && b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04 // PK..
+
+    const isPdf = isPdfMagic || mime === "application/pdf" || name.endsWith(".pdf")
+    const isDocx = isZipMagic || mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || name.endsWith(".docx")
+
+    try {
+        if (isPdf) {
+            const parsed = await pdfParse(req.file.buffer)
+            resumeText = parsed.text || ""
+        } else if (isDocx) {
+            const result = await mammoth.extractRawText({ buffer: req.file.buffer })
+            resumeText = result.value || ""
+        } else {
+            return res.status(400).json({
+                message: "Unsupported resume file type. Please upload a PDF or DOCX."
+            })
+        }
+    } catch (err) {
+        // If local parsing fails (scanned PDF / encrypted / corrupted),
+        // fall back to letting Gemini read the original file directly.
+        if (aiMimeType) {
+            resumeFileForAi = {
+                mimeType: aiMimeType,
+                data: req.file.buffer.toString("base64")
+            }
+            resumeText = ""
+        }
+    }
+}
+```
+
+<Info>
+The system uses "magic bytes" detection for reliable format identification, and can fall back to sending the raw file to Gemini AI if text extraction fails (e.g., scanned PDFs).
+</Info>
+
+### 2. AI Report Generation
+
+The system calls the Gemini AI service with structured schema enforcement:
+
+```javascript interview.controller.js:92-105
+let interViewReportByAi
+try {
+    interViewReportByAi = await generateInterviewReport({
+        title: resolvedTitle,
+        resume: resumeText,
+        selfDescription: resolvedSelfDescription,
+        jobDescription: resolvedJobDescription,
+        resumeFile: resumeFileForAi
+    })
+} catch (err) {
+    return res.status(502).json({
+        message: "AI service failed to generate interview report. Please try again.",
+    })
+}
+```
+
+### 3. Database Storage
+
+Generated reports are saved with user association:
+
+```javascript interview.controller.js:107-130
+let interviewReport
+try {
+    interviewReport = await interviewReportModel.create({
+        user: req.user.id,
+        resume: resumeText,
+        selfDescription: resolvedSelfDescription,
+        ...interViewReportByAi,
+        title: resolvedTitle,
+        jobDescription: resolvedJobDescription
+    })
+} catch (err) {
+    if (err?.name === "ValidationError") {
+        return res.status(400).json({
+            message: err.message
+        })
+    }
+    throw err
+}
+
+res.status(201).json({
+    message: "Interview report generated successfully.",
+    interviewReport
+})
+```
+
+## AI Schema Definition
+
+The system uses Zod schemas to enforce structured AI responses:
+
+```javascript ai.service.js:11-33
+const interviewReportSchema = z.object({
+    matchScore: z.number().describe("A score between 0 and 100 indicating how well the candidate's profile matches the job describe"),
+    technicalQuestions: z.array(z.object({
+        question: z.string().describe("The technical question can be asked in the interview"),
+        intention: z.string().describe("The intention of interviewer behind asking this question"),
+        answer: z.string().describe("How to answer this question, what points to cover, what approach to take etc.")
+    })).describe("Technical questions that can be asked in the interview along with their intention and how to answer them"),
+    behavioralQuestions: z.array(z.object({
+        question: z.string().describe("The technical question can be asked in the interview"),
+        intention: z.string().describe("The intention of interviewer behind asking this question"),
+        answer: z.string().describe("How to answer this question, what points to cover, what approach to take etc.")
+    })).describe("Behavioral questions that can be asked in the interview along with their intention and how to answer them"),
+    skillGaps: z.array(z.object({
+        skill: z.string().describe("The skill which the candidate is lacking"),
+        severity: z.enum([ "low", "medium", "high" ]).describe("The severity of this skill gap")
+    })).describe("List of skill gaps in the candidate's profile along with their severity"),
+    preparationPlan: z.array(z.object({
+        day: z.number().describe("The day number in the preparation plan, starting from 1"),
+        focus: z.string().describe("The main focus of this day in the preparation plan"),
+        tasks: z.array(z.string()).describe("List of tasks to be done on this day")
+    })).describe("A day-wise preparation plan for the candidate"),
+    title: z.string().describe("The title of the job for which the interview report is generated"),
+})
+```
+
+## Report Data Structure
+
+### Database Schema
+
+```javascript interviewReport.model.js:67-96
+const interviewReportSchema = new mongoose.Schema({
+    jobDescription: {
+        type: String,
+        required: [ true, "Job description is required" ]
+    },
+    resume: {
+        type: String,
+    },
+    selfDescription: {
+        type: String,
+    },
+    matchScore: {
+        type: Number,
+        min: 0,
+        max: 100,
+    },
+    technicalQuestions: [ technicalQuestionSchema ],
+    behavioralQuestions: [ behavioralQuestionSchema ],
+    skillGaps: [ skillGapSchema ],
+    preparationPlan: [ preparationPlanSchema ],
+    user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "users"
+    },
+    title: {
+        type: String,
+        required: [ true, "Job title is required" ]
+    }
+}, {
+    timestamps: true
+})
+```
+
+### Sub-Schemas
+
+<Tabs>
+  <Tab title="Technical Questions">
+    ```javascript interviewReport.model.js:4-19
+    const technicalQuestionSchema = new mongoose.Schema({
+        question: {
+            type: String,
+            required: [ true, "Technical question is required" ]
+        },
+        intention: {
+            type: String,
+            required: [ true, "Intention is required" ]
+        },
+        answer: {
+            type: String,
+            required: [ true, "Answer is required" ]
+        }
+    }, {
+        _id: false
+    })
+    ```
+  </Tab>
+  <Tab title="Skill Gaps">
+    ```javascript interviewReport.model.js:38-50
+    const skillGapSchema = new mongoose.Schema({
+        skill: {
+            type: String,
+            required: [ true, "Skill is required" ]
+        },
+        severity: {
+            type: String,
+            enum: [ "low", "medium", "high" ],
+            required: [ true, "Severity is required" ]
+        }
+    }, {
+        _id: false
+    })
+    ```
+  </Tab>
+  <Tab title="Preparation Plan">
+    ```javascript interviewReport.model.js:52-65
+    const preparationPlanSchema = new mongoose.Schema({
+        day: {
+            type: Number,
+            required: [ true, "Day is required" ]
+        },
+        focus: {
+            type: String,
+            required: [ true, "Focus is required" ]
+        },
+        tasks: [ {
+            type: String,
+            required: [ true, "Task is required" ]
+        } ]
+    })
+    ```
+  </Tab>
+</Tabs>
+
+## Viewing Interview Reports
+
+### Individual Report Page
+
+Users can view detailed reports with an interactive interface:
+
+**API Endpoint:** `GET /api/interview/report/:interviewId`
+
+**UI Sections:**
+
+<Tabs>
+  <Tab title="Technical Questions">
+    - Expandable question cards
+    - Shows interviewer's intention
+    - Provides model answers
+    - Question count display
+    
+    ```jsx Interview.jsx:117-128
+    {activeNav === 'technical' && (
+        <section>
+            <div className='content-header'>
+                <h2>Technical Questions</h2>
+                <span className='content-header__count'>{report.technicalQuestions.length} questions</span>
+            </div>
+            <div className='q-list'>
+                {report.technicalQuestions.map((q, i) => (
+                    <QuestionCard key={i} item={q} index={i} />
+                ))}
+            </div>
+        </section>
+    )}
+    ```
+  </Tab>
+  <Tab title="Behavioral Questions">
+    - Same expandable card interface
+    - Behavioral interview scenarios
+    - STAR method guidance
+    - Example responses
+  </Tab>
+  <Tab title="Preparation Roadmap">
+    - Day-by-day preparation plan
+    - Focus areas for each day
+    - Actionable task lists
+    - Progress tracking
+    
+    ```jsx Interview.jsx:145-156
+    {activeNav === 'roadmap' && (
+        <section>
+            <div className='content-header'>
+                <h2>Preparation Road Map</h2>
+                <span className='content-header__count'>{report.preparationPlan.length}-day plan</span>
+            </div>
+            <div className='roadmap-list'>
+                {report.preparationPlan.map((day) => (
+                    <RoadMapDay key={day.day} day={day} />
+                ))}
+            </div>
+        </section>
+    )}
+    ```
+  </Tab>
+</Tabs>
+
+### Match Score Display
+
+The sidebar shows a visual match score with color-coded severity:
+
+```jsx Interview.jsx:81-83
+const scoreColor =
+    report.matchScore >= 80 ? 'score--high' :
+        report.matchScore >= 60 ? 'score--mid' : 'score--low'
+```
+
+- **High (80-100%):** Strong match - green indicator
+- **Medium (60-79%):** Moderate match - yellow indicator  
+- **Low (0-59%):** Weak match - red indicator
+
+### Skill Gaps Sidebar
+
+Displays identified skill gaps with severity levels:
+
+```jsx Interview.jsx:178-187
+<div className='skill-gaps'>
+    <p className='skill-gaps__label'>Skill Gaps</p>
+    <div className='skill-gaps__list'>
+        {report.skillGaps.map((gap, i) => (
+            <span key={i} className={`skill-tag skill-tag--${gap.severity}`}>
+                {gap.skill}
+            </span>
+        ))}
+    </div>
+</div>
+```
+
+## Listing All Reports
+
+Users can view all their interview reports on the home page:
+
+**API Endpoint:** `GET /api/interview/`
+
+**Response:** Returns summary data (excludes full question/plan details for performance)
+
+```javascript interview.controller.js:159-166
+async function getAllInterviewReportsController(req, res) {
+    const interviewReports = await interviewReportModel.find({ user: req.user.id })
+        .sort({ createdAt: -1 })
+        .select("-resume -selfDescription -jobDescription -__v -technicalQuestions -behavioralQuestions -skillGaps -preparationPlan")
+
+    res.status(200).json({
+        message: "Interview reports fetched successfully.",
+        interviewReports
+    })
+}
+```
+
+**UI Display:**
+
+```jsx Home.jsx:136-149
+{reports.length > 0 && (
+    <section className='recent-reports'>
+        <h2>My Recent Interview Plans</h2>
+        <ul className='reports-list'>
+            {reports.map(report => (
+                <li key={report._id} className='report-item' onClick={() => navigate(`/interview/${report._id}`)}>
+                    <h3>{report.title || 'Untitled Position'}</h3>
+                    <p className='report-meta'>Generated on {new Date(report.createdAt).toLocaleDateString()}</p>
+                    <p className={`match-score ${report.matchScore >= 80 ? 'score--high' : report.matchScore >= 60 ? 'score--mid' : 'score--low'}`}>
+                        Match Score: {report.matchScore}%
+                    </p>
+                </li>
+            ))}
+        </ul>
+    </section>
+)}
+```
+
+## AI Integration Details
+
+The system uses Google's Gemini 3 Flash model with structured JSON output:
+
+```javascript ai.service.js:63-70
+const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents,
+    config: {
+        responseMimeType: "application/json",
+        responseSchema: zodToJsonSchema(interviewReportSchema),
+    }
+})
+```
+
+<CardGroup cols={2}>
+  <Card title="Model" icon="robot">
+    Google Gemini 3 Flash Preview
+  </Card>
+  <Card title="Response Format" icon="code">
+    Structured JSON with Zod schema validation
+  </Card>
+  <Card title="File Support" icon="file">
+    Direct PDF/DOCX analysis via inline data
+  </Card>
+  <Card title="Processing Time" icon="clock">
+    ~30 seconds average generation time
+  </Card>
+</CardGroup>

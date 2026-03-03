@@ -1,0 +1,162 @@
+---
+title: 'Get Current User'
+api: 'GET /api/auth/get-me'
+description: 'Retrieve the currently authenticated user details'
+---
+
+## Description
+
+Retrieves the profile information of the currently authenticated user. This endpoint requires a valid JWT token in the cookie.
+
+<Note>
+  This is a **protected endpoint** that requires authentication. The `authUser` middleware validates the JWT token before processing the request.
+</Note>
+
+## Authentication
+
+This endpoint requires a valid JWT token to be present in the `token` cookie. The token is automatically included when using the same session that performed login or registration.
+
+### Authentication Middleware
+
+The `authUser` middleware performs the following checks:
+1. Verifies the `token` cookie is present
+2. Checks if the token is blacklisted (logged out)
+3. Verifies the token signature using `JWT_SECRET`
+4. Decodes the token and attaches user info to `req.user`
+
+## Request
+
+No request body or query parameters required. Authentication is handled via the `token` cookie.
+
+## Response
+
+<ResponseField name="message" type="string">
+  Success message indicating user details were fetched successfully
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  The current user's profile information
+  
+  <Expandable title="user properties">
+    <ResponseField name="id" type="string">
+      The unique identifier of the user
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      The username of the user
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      The email address of the user
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Success Response (200)
+
+```json
+{
+  "message": "User details fetched successfully",
+  "user": {
+    "id": "507f1f77bcf86cd799439011",
+    "username": "johndoe",
+    "email": "john@example.com"
+  }
+}
+```
+
+### Error Responses
+
+<ResponseExample>
+```json 401 - No Token Provided
+{
+  "message": "Token not provided."
+}
+```
+
+```json 401 - Token Blacklisted
+{
+  "message": "token is invalid"
+}
+```
+
+```json 401 - Invalid Token
+{
+  "message": "Invalid token."
+}
+```
+</ResponseExample>
+
+## Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://api.example.com/api/auth/get-me \
+  -b cookies.txt
+```
+
+```javascript JavaScript
+const response = await fetch('/api/auth/get-me', {
+  method: 'GET',
+  credentials: 'include' // Important: Include cookies
+});
+
+if (response.ok) {
+  const data = await response.json();
+  console.log('Current user:', data.user);
+} else {
+  console.error('Not authenticated');
+}
+```
+
+```python Python
+import requests
+
+session = requests.Session()
+# Assuming session already has the authentication cookie from login
+
+response = session.get('https://api.example.com/api/auth/get-me')
+
+if response.status_code == 200:
+    data = response.json()
+    print('Current user:', data['user'])
+else:
+    print('Not authenticated')
+```
+</CodeGroup>
+
+## Implementation Details
+
+- **Protected endpoint**: Requires `authUser` middleware
+- Token must be present in the `token` cookie
+- Token must not be blacklisted (user must not have logged out)
+- Token must have a valid signature and not be expired
+- User ID is extracted from the decoded JWT token (`req.user.id`)
+- User data is fetched fresh from the database using the ID
+- Password field is excluded from the response
+
+## Common Use Cases
+
+<AccordionGroup>
+  <Accordion title="Check Authentication Status">
+    Call this endpoint on app initialization to verify if the user is still authenticated. If it returns 401, redirect to the login page.
+  </Accordion>
+  
+  <Accordion title="Display User Profile">
+    Use this endpoint to fetch and display the current user's profile information in the application header or profile section.
+  </Accordion>
+  
+  <Accordion title="Token Validation">
+    Before performing sensitive operations, call this endpoint to ensure the user's session is still valid and hasn't been logged out.
+  </Accordion>
+</AccordionGroup>
+
+## Security Considerations
+
+<Warning>
+  This endpoint validates that:
+  - The token exists and is properly formatted
+  - The token hasn't been blacklisted (logged out)
+  - The token signature is valid and hasn't been tampered with
+  - The token hasn't expired (1-day expiration from creation)
+</Warning>

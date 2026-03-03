@@ -1,0 +1,135 @@
+---
+title: 'Register User'
+api: 'POST /api/auth/register'
+description: 'Register a new user account'
+---
+
+## Description
+
+Creates a new user account with username, email, and password. Upon successful registration, a JWT token is automatically set as an HTTP-only cookie with a 1-day expiration.
+
+## Request Body
+
+<ParamField body="username" type="string" required>
+  The unique username for the new user account
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  The email address for the new user account. Must be unique.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The password for the new user account. Will be hashed using bcrypt before storage.
+</ParamField>
+
+## Response
+
+<ResponseField name="message" type="string">
+  Success message indicating the user was registered successfully
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  The registered user object
+  
+  <Expandable title="user properties">
+    <ResponseField name="id" type="string">
+      The unique identifier of the registered user
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      The username of the registered user
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      The email address of the registered user
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Success Response (201)
+
+```json
+{
+  "message": "User registered successfully",
+  "user": {
+    "id": "507f1f77bcf86cd799439011",
+    "username": "johndoe",
+    "email": "john@example.com"
+  }
+}
+```
+
+A JWT token is automatically set as an HTTP-only cookie named `token` with a 1-day expiration. The token contains:
+- `id`: User's unique identifier
+- `username`: User's username
+- `exp`: Token expiration timestamp
+
+### Error Responses
+
+<ResponseExample>
+```json 400 - Missing Fields
+{
+  "message": "Please provide username, email and password"
+}
+```
+
+```json 400 - User Already Exists
+{
+  "message": "Account already exists with this email address or username"
+}
+```
+</ResponseExample>
+
+## Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.example.com/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "johndoe",
+    "email": "john@example.com",
+    "password": "securePassword123"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/auth/register', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    username: 'johndoe',
+    email: 'john@example.com',
+    password: 'securePassword123'
+  }),
+  credentials: 'include' // Important: Include cookies
+});
+
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.example.com/api/auth/register',
+    json={
+        'username': 'johndoe',
+        'email': 'john@example.com',
+        'password': 'securePassword123'
+    }
+)
+
+data = response.json()
+```
+</CodeGroup>
+
+## Implementation Details
+
+- Passwords are hashed using bcrypt with a salt round of 10 before storage
+- JWT tokens are signed with `JWT_SECRET` environment variable
+- Token expiration is set to 1 day (24 hours)
+- The endpoint checks for duplicate usernames and email addresses
+- No authentication required (public endpoint)

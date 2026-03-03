@@ -1,0 +1,436 @@
+---
+title: 'AI Service Setup'
+description: 'Configure Google Gemini AI for interview reports and resume generation'
+---
+
+The Resume Generator uses Google's Gemini AI to power intelligent features including interview report generation, question suggestions, and ATS-friendly resume creation.
+
+## Google Gemini API Overview
+
+The application integrates with Google's Gemini AI using the `@google/genai` SDK. The AI service is configured in `src/services/ai.service.js` and uses the **Gemini 3 Flash Preview** model for fast, high-quality content generation.
+
+### AI Capabilities
+
+The Gemini AI service provides:
+
+1. **Interview Report Generation**
+   - Analyzes job descriptions and resumes
+   - Calculates match scores (0-100)
+   - Generates personalized technical and behavioral questions
+   - Identifies skill gaps with severity levels
+   - Creates day-by-day preparation plans
+
+2. **Resume Generation**
+   - Generates ATS-friendly HTML resumes
+   - Tailors content to specific job descriptions
+   - Converts HTML to PDF using Puppeteer
+   - Optimizes for 1-2 page length
+   - Maintains professional formatting
+
+## Getting Started
+
+<Steps>
+  <Step title="Create Google AI Studio Account">
+    1. Visit [Google AI Studio](https://aistudio.google.com/)
+    2. Sign in with your Google account
+    3. Accept the terms of service
+  </Step>
+  
+  <Step title="Generate API Key">
+    1. In Google AI Studio, click **Get API Key** in the left sidebar
+    2. Click **Create API Key**
+    3. Select an existing Google Cloud project or create a new one
+    4. Copy your API key (starts with `AIzaSy...`)
+  </Step>
+  
+  <Step title="Add API Key to Environment">
+    Add your API key to the `.env` file in the backend directory:
+    ```bash
+    GOOGLE_GENAI_API_KEY=AIzaSyD...
+    ```
+  </Step>
+  
+  <Step title="Verify Configuration">
+    Start your application and test the AI features:
+    ```bash
+    npm start
+    ```
+    
+    The AI service will initialize on startup. Check the console for any errors.
+  </Step>
+</Steps>
+
+<Warning>
+  **API Key Security**:
+  - Never commit your API key to version control
+  - Don't expose the key in client-side code
+  - Keep the key in your `.env` file (which should be in `.gitignore`)
+  - Rotate your key immediately if it's compromised
+  - Set up usage quotas to prevent unexpected charges
+</Warning>
+
+## AI Service Configuration
+
+The AI service is initialized in `src/services/ai.service.js:6-8`:
+
+```javascript
+const { GoogleGenAI } = require("@google/genai")
+
+const ai = new GoogleGenAI({
+    apiKey: process.env.GOOGLE_GENAI_API_KEY
+})
+```
+
+### Model Selection
+
+The application uses **Gemini 3 Flash Preview** (`gemini-3-flash-preview`) for optimal performance:
+
+- **Fast response times**: Ideal for real-time applications
+- **Structured output**: Supports JSON schema responses
+- **Multimodal input**: Can process text and uploaded resume files
+- **Cost-effective**: Lower cost than full Gemini Pro models
+
+## Interview Report Generation
+
+The `generateInterviewReport` function analyzes candidate profiles and generates comprehensive interview preparation reports.
+
+### Input Schema
+
+<ParamField path="title" type="string" required>
+  Job title for the position
+</ParamField>
+
+<ParamField path="resume" type="string">
+  Resume text content (optional if resumeFile is provided)
+</ParamField>
+
+<ParamField path="selfDescription" type="string">
+  Candidate's self-description or cover letter
+</ParamField>
+
+<ParamField path="jobDescription" type="string" required>
+  Complete job description including requirements and responsibilities
+</ParamField>
+
+<ParamField path="resumeFile" type="object">
+  Uploaded resume file (PDF, DOC, etc.)
+  - `data`: Base64 encoded file data
+  - `mimeType`: File MIME type (e.g., "application/pdf")
+</ParamField>
+
+### Output Schema
+
+The AI generates a structured JSON response with the following fields:
+
+<ParamField path="matchScore" type="number">
+  Score between 0-100 indicating profile-job match quality
+</ParamField>
+
+<ParamField path="technicalQuestions" type="array">
+  Array of technical interview questions
+  
+  Each question includes:
+  - `question`: The interview question text
+  - `intention`: Why the interviewer asks this
+  - `answer`: Recommended approach to answer
+</ParamField>
+
+<ParamField path="behavioralQuestions" type="array">
+  Array of behavioral interview questions
+  
+  Each question includes:
+  - `question`: The interview question text
+  - `intention`: Why the interviewer asks this
+  - `answer`: Recommended approach to answer
+</ParamField>
+
+<ParamField path="skillGaps" type="array">
+  Identified skill gaps
+  
+  Each gap includes:
+  - `skill`: The skill name
+  - `severity`: "low", "medium", or "high"
+</ParamField>
+
+<ParamField path="preparationPlan" type="array">
+  Day-by-day preparation roadmap
+  
+  Each day includes:
+  - `day`: Day number (starting from 1)
+  - `focus`: Main focus area
+  - `tasks`: Array of specific tasks
+</ParamField>
+
+<ParamField path="title" type="string">
+  Echo of the job title
+</ParamField>
+
+### Schema Definition
+
+The response schema is defined using Zod and converted to JSON Schema for the Gemini API:
+
+```javascript
+const { z } = require("zod")
+const { zodToJsonSchema } = require("zod-to-json-schema")
+
+const interviewReportSchema = z.object({
+    matchScore: z.number().describe("A score between 0 and 100..."),
+    technicalQuestions: z.array(z.object({
+        question: z.string(),
+        intention: z.string(),
+        answer: z.string()
+    })),
+    // ... more fields
+})
+```
+
+This ensures the AI returns consistently structured data that matches your database schema.
+
+### API Call Configuration
+
+The interview report generation uses these settings:
+
+```javascript
+const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents,
+    config: {
+        responseMimeType: "application/json",
+        responseSchema: zodToJsonSchema(interviewReportSchema),
+    }
+})
+```
+
+<ParamField path="model" type="string">
+  Model identifier: `gemini-3-flash-preview`
+</ParamField>
+
+<ParamField path="contents" type="string | array">
+  Input prompt, optionally with file attachments for multimodal processing
+</ParamField>
+
+<ParamField path="config.responseMimeType" type="string">
+  Set to `"application/json"` for structured output
+</ParamField>
+
+<ParamField path="config.responseSchema" type="object">
+  JSON Schema defining the expected response structure
+</ParamField>
+
+## Resume Generation
+
+The `generateResumePdf` function creates professional, ATS-friendly resumes tailored to job descriptions.
+
+### Input Parameters
+
+<ParamField path="resume" type="string" required>
+  Candidate's existing resume or career information
+</ParamField>
+
+<ParamField path="selfDescription" type="string" required>
+  Candidate's self-description highlighting key strengths
+</ParamField>
+
+<ParamField path="jobDescription" type="string" required>
+  Target job description to tailor the resume for
+</ParamField>
+
+### Output
+
+Returns a PDF buffer that can be downloaded or saved to disk.
+
+### Resume Generation Process
+
+<Steps>
+  <Step title="AI generates HTML">
+    The Gemini model creates well-formatted HTML optimized for the job:
+    - Highlights relevant experience
+    - Uses professional styling
+    - Maintains ATS compatibility
+    - Keeps length to 1-2 pages
+  </Step>
+  
+  <Step title="HTML to PDF conversion">
+    Puppeteer converts the HTML to a formatted PDF:
+    ```javascript
+    const browser = await puppeteer.launch()
+    const page = await browser.newPage();
+    await page.setContent(htmlContent, { waitUntil: "networkidle0" })
+    
+    const pdfBuffer = await page.pdf({
+        format: "A4",
+        margin: {
+            top: "20mm",
+            bottom: "20mm",
+            left: "15mm",
+            right: "15mm"
+        }
+    })
+    ```
+  </Step>
+  
+  <Step title="Return PDF buffer">
+    The PDF buffer is returned to the controller for download
+  </Step>
+</Steps>
+
+### Prompt Engineering
+
+The resume generation prompt includes specific instructions for quality:
+
+- Make content sound natural, not AI-generated
+- Highlight relevant strengths for the job
+- Use colors and formatting professionally
+- Ensure ATS compatibility
+- Keep to 1-2 pages maximum
+- Focus on quality over quantity
+
+## Rate Limits and Quotas
+
+Google AI Studio has usage limits:
+
+### Free Tier Limits
+
+- **Requests per minute**: 15 RPM
+- **Requests per day**: 1,500 RPD
+- **Tokens per minute**: 1 million TPM
+
+<Info>
+  Monitor your usage in [Google AI Studio](https://aistudio.google.com/) under the **Quota** section.
+</Info>
+
+### Best Practices
+
+1. **Implement request throttling** in production
+2. **Cache results** when appropriate
+3. **Handle rate limit errors** gracefully
+4. **Monitor quota usage** regularly
+5. **Consider upgrading** to paid tier for production
+
+## Error Handling
+
+The AI service may throw errors that need proper handling:
+
+<AccordionGroup>
+  <Accordion title="API Key Invalid">
+    **Error**: Invalid API key
+    
+    **Solution**:
+    - Verify your API key is correct in `.env`
+    - Check the key hasn't expired
+    - Regenerate a new key if necessary
+  </Accordion>
+  
+  <Accordion title="Rate Limit Exceeded">
+    **Error**: 429 Too Many Requests
+    
+    **Solution**:
+    - Implement exponential backoff retry logic
+    - Reduce request frequency
+    - Upgrade to paid tier for higher limits
+  </Accordion>
+  
+  <Accordion title="Model Not Available">
+    **Error**: Model not found or unavailable
+    
+    **Solution**:
+    - Verify model name is `"gemini-3-flash-preview"`
+    - Check Google AI Studio for service status
+    - Try alternative models if available
+  </Accordion>
+  
+  <Accordion title="Invalid Response Schema">
+    **Error**: Response doesn't match expected schema
+    
+    **Solution**:
+    - Review your Zod schema definition
+    - Check AI prompt clarity
+    - Add more detailed field descriptions
+    - Validate the JSON Schema conversion
+  </Accordion>
+</AccordionGroup>
+
+## Testing AI Integration
+
+Test your AI setup with a simple request:
+
+```javascript
+// Test file: test-ai.js
+require('dotenv').config()
+const { generateInterviewReport } = require('./src/services/ai.service')
+
+async function test() {
+    try {
+        const report = await generateInterviewReport({
+            title: "Software Engineer",
+            resume: "5 years of JavaScript development experience",
+            selfDescription: "Passionate full-stack developer",
+            jobDescription: "Looking for a skilled JavaScript developer..."
+        })
+        
+        console.log('✓ AI service working!')
+        console.log('Match Score:', report.matchScore)
+        console.log('Questions:', report.technicalQuestions.length)
+    } catch (error) {
+        console.error('✗ AI service failed:', error.message)
+    }
+}
+
+test()
+```
+
+Run the test:
+```bash
+node test-ai.js
+```
+
+## Optimizing AI Performance
+
+### Prompt Optimization
+
+- Keep prompts clear and specific
+- Include all necessary context
+- Use examples when needed
+- Specify desired output format
+
+### Schema Design
+
+- Use descriptive field descriptions
+- Leverage Zod's validation features
+- Keep schemas aligned with database models
+- Document enum values clearly
+
+### Response Processing
+
+- Parse JSON responses safely
+- Validate against expected schema
+- Handle missing or null fields
+- Log unexpected responses for review
+
+## Monitoring and Debugging
+
+### Enable Detailed Logging
+
+```javascript
+const response = await ai.models.generateContent(config)
+console.log('AI Response:', response.text)
+console.log('Token Usage:', response.usageMetadata)
+```
+
+### Track Metrics
+
+- Request success/failure rates
+- Average response times
+- Token usage per request
+- Error types and frequencies
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="gear" href="/configuration/environment-variables">
+    Review all configuration requirements
+  </Card>
+  <Card title="Database Setup" icon="database" href="/configuration/database-setup">
+    Set up MongoDB and understand data models
+  </Card>
+</CardGroup>

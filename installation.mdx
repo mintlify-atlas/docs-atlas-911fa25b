@@ -1,0 +1,644 @@
+---
+title: Installation
+description: Complete installation guide for setting up Resume Generator in development and production environments
+---
+
+## Overview
+
+Resume Generator consists of two separate applications:
+
+- **Backend**: Node.js/Express REST API (port 3000)
+- **Frontend**: React/Vite SPA (port 5173)
+
+This guide covers both development and production setup.
+
+## System requirements
+
+<CardGroup cols={2}>
+  <Card title="Development" icon="laptop-code">
+    - Node.js 18+ (LTS recommended)
+    - npm 9+ or yarn 1.22+
+    - MongoDB 6.0+ (local or Atlas)
+    - 4GB RAM minimum
+  </Card>
+  <Card title="Production" icon="server">
+    - Node.js 18+ (LTS)
+    - Process manager (PM2 recommended)
+    - Reverse proxy (nginx/Apache)
+    - SSL certificate
+  </Card>
+</CardGroup>
+
+## Development installation
+
+### Backend setup
+
+<Steps>
+  <Step title="Navigate to backend directory">
+    ```bash
+    cd backend
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    The backend uses these key packages:
+
+    ```json
+    {
+      "dependencies": {
+        "@google/genai": "^1.43.0",
+        "bcryptjs": "^3.0.3",
+        "cookie-parser": "^1.4.7",
+        "cors": "^2.8.6",
+        "dotenv": "^17.3.1",
+        "express": "^5.2.1",
+        "jsonwebtoken": "^9.0.3",
+        "mongoose": "^9.2.3",
+        "mammoth": "^1.10.0",
+        "multer": "^2.1.0",
+        "nodemon": "^3.1.14",
+        "pdf-parse": "^2.4.5",
+        "puppeteer": "^24.37.5",
+        "zod": "^4.3.6",
+        "zod-to-json-schema": "^3.25.1"
+      }
+    }
+    ```
+
+    Source: backend/package.json
+
+    Install all dependencies:
+    ```bash
+    npm install
+    ```
+
+    <Note>
+      Puppeteer will download a compatible Chromium binary (~300MB) during installation. This is normal and required for PDF generation.
+    </Note>
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env` file in the `backend/` directory:
+
+    ```bash
+    touch .env
+    ```
+
+    Add the following configuration:
+
+    ```env
+    # MongoDB Connection
+    MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/resume-generator?retryWrites=true&w=majority
+
+    # JWT Secret (generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+    JWT_SECRET=your_64_character_hexadecimal_secret
+
+    # Google Gemini API Key
+    GOOGLE_GENAI_API_KEY=AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+    ```
+
+    <Warning>
+      Add `.env` to your `.gitignore` file to prevent accidentally committing sensitive credentials:
+      ```bash
+      echo ".env" >> .gitignore
+      ```
+    </Warning>
+
+    **Environment variable details:**
+
+    | Variable | Description | Example |
+    |----------|-------------|----------|
+    | `MONGO_URI` | MongoDB connection string with authentication | `mongodb+srv://user:pass@host/db` |
+    | `JWT_SECRET` | Secret key for signing JWT tokens (min 32 chars) | Use crypto.randomBytes(32).toString('hex') |
+    | `GOOGLE_GENAI_API_KEY` | API key from Google AI Studio | Starts with `AIzaSy...` |
+  </Step>
+
+  <Step title="Set up MongoDB">
+    **Option A: MongoDB Atlas (recommended for beginners)**
+
+    1. Create a free account at [mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas)
+    2. Create a new cluster (free tier M0 is sufficient)
+    3. Create a database user:
+       - Go to Database Access
+       - Add New Database User
+       - Choose password authentication
+       - Save the username and password
+    4. Whitelist your IP address:
+       - Go to Network Access
+       - Add IP Address
+       - Add your current IP or `0.0.0.0/0` for development
+    5. Get your connection string:
+       - Click "Connect" on your cluster
+       - Choose "Connect your application"
+       - Copy the connection string
+       - Replace `<password>` with your database user password
+
+    **Option B: Local MongoDB**
+
+    Install MongoDB Community Edition:
+
+    <CodeGroup>
+    ```bash macOS
+    brew tap mongodb/brew
+    brew install mongodb-community
+    brew services start mongodb-community
+    ```
+
+    ```bash Ubuntu
+    wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | sudo apt-key add -
+    echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+    sudo apt update
+    sudo apt install -y mongodb-org
+    sudo systemctl start mongod
+    ```
+
+    ```bash Windows
+    # Download installer from mongodb.com/try/download/community
+    # Run the MSI installer
+    # MongoDB will start as a Windows service
+    ```
+    </CodeGroup>
+
+    Use this connection string in `.env`:
+    ```env
+    MONGO_URI=mongodb://localhost:27017/resume-generator
+    ```
+
+    The database connection is established in the server startup:
+    ```javascript
+    const mongoose = require("mongoose")
+
+    async function connectToDB() {
+      try {
+        await mongoose.connect(process.env.MONGO_URI)
+        console.log("Connected to Database")
+      } catch (err) {
+        console.log(err)
+      }
+    }
+    ```
+
+    Source: backend/src/config/database.js
+  </Step>
+
+  <Step title="Get a Google Gemini API key">
+    1. Visit [Google AI Studio](https://ai.google.dev/)
+    2. Sign in with your Google account
+    3. Click **Get API Key**
+    4. Create a new API key for your project
+    5. Copy the key and add it to your `.env` file
+
+    The application uses the Gemini 3 Flash Preview model:
+    ```javascript
+    const ai = new GoogleGenAI({
+      apiKey: process.env.GOOGLE_GENAI_API_KEY
+    })
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: zodToJsonSchema(interviewReportSchema)
+      }
+    })
+    ```
+
+    Source: backend/src/services/ai.service.js:6-70
+
+    <Warning>
+      Gemini API has usage limits on the free tier. Monitor your usage at [Google AI Studio](https://aistudio.google.com/).
+    </Warning>
+  </Step>
+
+  <Step title="Start the backend server">
+    Run the development server with hot reloading:
+
+    ```bash
+    npm run dev
+    ```
+
+    This executes:
+    ```json
+    {
+      "scripts": {
+        "dev": "npx nodemon server.js"
+      }
+    }
+    ```
+
+    Source: backend/package.json:8
+
+    The server will start on port 3000:
+    ```javascript
+    app.listen(3000, () => {
+      console.log("Server is running on port 3000")
+    })
+    ```
+
+    Source: backend/server.js:8-10
+
+    You should see:
+    ```
+    [nodemon] starting `node server.js`
+    Connected to Database
+    Server is running on port 3000
+    ```
+  </Step>
+</Steps>
+
+### Frontend setup
+
+<Steps>
+  <Step title="Navigate to frontend directory">
+    ```bash
+    cd frontend
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    The frontend uses these key packages:
+
+    ```json
+    {
+      "dependencies": {
+        "axios": "^1.13.6",
+        "react": "^19.2.0",
+        "react-dom": "^19.2.0",
+        "react-router": "^7.13.1",
+        "saas": "^1.0.0"
+      },
+      "devDependencies": {
+        "@vitejs/plugin-react": "^5.1.1",
+        "sass-embedded": "^1.97.3",
+        "vite": "^7.3.1",
+        "eslint": "^9.39.1"
+      }
+    }
+    ```
+
+    Source: frontend/package.json
+
+    Install all dependencies:
+    ```bash
+    npm install
+    ```
+  </Step>
+
+  <Step title="Configure API endpoint (optional)">
+    By default, the frontend makes requests to `http://localhost:3000`. If you need to change this, update the Axios configuration or API service files.
+
+    The backend CORS is pre-configured for the Vite dev server:
+    ```javascript
+    app.use(cors({
+      origin: "http://localhost:5173",
+      credentials: true
+    }))
+    ```
+
+    Source: backend/src/app.js:9-12
+  </Step>
+
+  <Step title="Start the development server">
+    Run the Vite development server:
+
+    ```bash
+    npm run dev
+    ```
+
+    This executes:
+    ```json
+    {
+      "scripts": {
+        "dev": "vite"
+      }
+    }
+    ```
+
+    The app will start on port 5173:
+    ```
+    VITE v7.3.1  ready in 543 ms
+
+    ➜  Local:   http://localhost:5173/
+    ➜  Network: use --host to expose
+    ➜  press h + enter to show help
+    ```
+
+    Open `http://localhost:5173` in your browser to access the application.
+  </Step>
+</Steps>
+
+## Project structure
+
+Understanding the codebase organization:
+
+### Backend structure
+
+```
+backend/
+├── server.js                 # Entry point, starts Express server
+├── package.json             # Dependencies and scripts
+├── .env                     # Environment variables (not in git)
+└── src/
+    ├── app.js               # Express app configuration, middleware, routes
+    ├── config/
+    │   └── database.js      # MongoDB connection logic
+    ├── controllers/
+    │   ├── auth.controller.js        # Register, login, logout handlers
+    │   └── interview.controller.js   # Interview report generation
+    ├── middlewares/
+    │   ├── auth.middleware.js        # JWT verification
+    │   └── file.middleware.js        # Multer file upload config
+    ├── models/
+    │   ├── user.model.js             # User schema (email, password)
+    │   ├── interviewReport.model.js  # Interview report schema
+    │   └── blacklist.model.js        # JWT blacklist for logout
+    ├── routes/
+    │   ├── auth.routes.js            # /api/auth/* endpoints
+    │   └── interview.routes.js       # /api/interview/* endpoints
+    └── services/
+        └── ai.service.js             # Google Gemini integration
+```
+
+### Frontend structure
+
+```
+frontend/
+├── index.html              # HTML template
+├── package.json           # Dependencies and scripts
+├── vite.config.js         # Vite configuration
+└── src/
+    ├── main.jsx           # React app entry point
+    ├── App.jsx            # Root component with providers
+    ├── app.routes.jsx     # React Router configuration
+    ├── style.scss         # Global styles
+    └── features/
+        ├── auth/
+        │   ├── auth.context.jsx      # Auth state management
+        │   ├── hooks/useAuth.js      # Auth hook
+        │   ├── services/auth.api.js  # Auth API calls
+        │   ├── pages/
+        │   │   ├── Login.jsx
+        │   │   └── Register.jsx
+        │   └── components/
+        │       └── Protected.jsx     # Route guard
+        └── interview/
+            ├── interview.context.jsx # Interview state
+            ├── hooks/useInterview.js
+            ├── services/interview.api.js
+            ├── pages/
+            │   ├── Home.jsx          # Main form page
+            │   └── Interview.jsx     # Report display page
+            └── style/
+                ├── home.scss
+                └── interview.scss
+```
+
+## Production deployment
+
+### Backend deployment
+
+<Steps>
+  <Step title="Build for production">
+    While the backend doesn't require a build step (CommonJS modules), ensure all dependencies are installed:
+
+    ```bash
+    npm ci --only=production
+    ```
+
+    This installs only production dependencies, excluding nodemon.
+  </Step>
+
+  <Step title="Set production environment variables">
+    Create a production `.env` file with:
+
+    ```env
+    NODE_ENV=production
+    MONGO_URI=your_production_mongodb_uri
+    JWT_SECRET=your_production_jwt_secret
+    GOOGLE_GENAI_API_KEY=your_gemini_api_key
+    PORT=3000
+    ```
+
+    <Warning>
+      Use strong, unique secrets in production. Never reuse development credentials.
+    </Warning>
+  </Step>
+
+  <Step title="Use a process manager">
+    Install and configure PM2:
+
+    ```bash
+    npm install -g pm2
+    pm2 start server.js --name resume-generator-api
+    pm2 save
+    pm2 startup
+    ```
+
+    This ensures the backend restarts automatically after server reboots.
+  </Step>
+
+  <Step title="Configure reverse proxy">
+    Set up nginx to proxy requests to the Node.js server:
+
+    ```nginx
+    server {
+      listen 80;
+      server_name api.yourresumegenerator.com;
+
+      location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      }
+    }
+    ```
+
+    Enable SSL with Let's Encrypt:
+    ```bash
+    sudo certbot --nginx -d api.yourresumegenerator.com
+    ```
+  </Step>
+
+  <Step title="Update CORS configuration">
+    Modify `backend/src/app.js` to allow requests from your production frontend domain:
+
+    ```javascript
+    app.use(cors({
+      origin: "https://yourresumegenerator.com",
+      credentials: true
+    }))
+    ```
+  </Step>
+</Steps>
+
+### Frontend deployment
+
+<Steps>
+  <Step title="Update API endpoint">
+    Configure the production API URL in your frontend code. Update API service files to point to your production backend:
+
+    ```javascript
+    const API_BASE_URL = import.meta.env.PROD 
+      ? 'https://api.yourresumegenerator.com'
+      : 'http://localhost:3000'
+    ```
+  </Step>
+
+  <Step title="Build for production">
+    Create an optimized production build:
+
+    ```bash
+    npm run build
+    ```
+
+    This executes:
+    ```json
+    {
+      "scripts": {
+        "build": "vite build"
+      }
+    }
+    ```
+
+    Output will be in the `dist/` directory.
+  </Step>
+
+  <Step title="Deploy to hosting service">
+    **Option A: Static hosting (Vercel, Netlify, Cloudflare Pages)**
+
+    Deploy the `dist/` folder:
+
+    ```bash
+    # Vercel
+    npx vercel --prod
+
+    # Netlify
+    npx netlify deploy --prod --dir=dist
+
+    # Cloudflare Pages (via CLI)
+    npx wrangler pages deploy dist
+    ```
+
+    **Option B: nginx static hosting**
+
+    Copy the built files to your web server:
+
+    ```bash
+    rsync -avz dist/ user@server:/var/www/resume-generator/
+    ```
+
+    Configure nginx:
+    ```nginx
+    server {
+      listen 80;
+      server_name yourresumegenerator.com;
+      root /var/www/resume-generator;
+      index index.html;
+
+      location / {
+        try_files $uri $uri/ /index.html;
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Puppeteer fails to launch in production">
+    **Error:** `Failed to launch the browser process`
+
+    **Solution for Linux servers:**
+
+    Install required dependencies:
+    ```bash
+    sudo apt-get install -y \
+      libnss3 \
+      libatk-bridge2.0-0 \
+      libx11-xcb1 \
+      libxcomposite1 \
+      libxdamage1 \
+      libxrandr2 \
+      libgbm1 \
+      libpangocairo-1.0-0 \
+      libasound2
+    ```
+
+    Or run Puppeteer with `--no-sandbox` flag (less secure):
+    ```javascript
+    const browser = await puppeteer.launch({
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    })
+    ```
+  </Accordion>
+
+  <Accordion title="MongoDB connection timeout in production">
+    **Solution:**
+    - Ensure your production server IP is whitelisted in MongoDB Atlas Network Access
+    - Check firewall rules allow outbound connections to MongoDB (port 27017)
+    - Verify the connection string uses the correct SRV format: `mongodb+srv://`
+  </Accordion>
+
+  <Accordion title="Environment variables not loading">
+    **Solution:**
+    - Ensure `.env` file is in the same directory as `server.js`
+    - Check that `dotenv` is called before any other imports:
+      ```javascript
+      require("dotenv").config()
+      ```
+    - For production, use your hosting provider's environment variable settings instead of `.env` files
+  </Accordion>
+
+  <Accordion title="Port already in use">
+    **Error:** `EADDRINUSE: address already in use :::3000`
+
+    **Solution:**
+    Find and kill the process using the port:
+
+    <CodeGroup>
+    ```bash macOS/Linux
+    lsof -ti:3000 | xargs kill -9
+    ```
+
+    ```powershell Windows
+    netstat -ano | findstr :3000
+    taskkill /PID <PID> /F
+    ```
+    </CodeGroup>
+  </Accordion>
+</AccordionGroup>
+
+## Verification checklist
+
+After installation, verify everything works:
+
+- [ ] Backend server starts without errors
+- [ ] MongoDB connection is established
+- [ ] Frontend dev server runs on port 5173
+- [ ] Can register a new user account
+- [ ] Can log in with credentials
+- [ ] Can access protected routes after login
+- [ ] Can upload a resume file (PDF/DOCX)
+- [ ] Interview report generates successfully
+- [ ] Can view generated report
+- [ ] Can export tailored resume PDF
+- [ ] Previous reports appear in dashboard
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication API" icon="key" href="/api/auth/register">
+    Explore authentication endpoints
+  </Card>
+  <Card title="Interview API" icon="brain" href="/api/interview/create-report">
+    Learn about interview report generation
+  </Card>
+</CardGroup>

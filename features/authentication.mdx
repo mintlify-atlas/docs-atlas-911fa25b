@@ -1,0 +1,352 @@
+---
+title: Authentication
+description: JWT-based authentication system with cookie sessions, token blacklisting, and protected routes
+---
+
+## Overview
+
+The Resume Generator uses a secure JWT-based authentication system with HTTP-only cookies for session management. The system includes user registration, login/logout flows, token blacklisting for secure logout, and middleware-based route protection.
+
+## Authentication Flow
+
+### User Registration
+
+New users register with a username, email, and password. Passwords are hashed using bcrypt before storage.
+
+**API Endpoint:** `POST /api/auth/register`
+
+**Request Body:**
+```json
+{
+  "username": "johndoe",
+  "email": "john@example.com",
+  "password": "securePassword123"
+}
+```
+
+**Backend Flow:**
+
+The registration controller validates input, checks for existing users, hashes the password, and creates a new user account:
+
+```javascript auth.controller.js:11-57
+async function registerUserController(req, res) {
+    const { username, email, password } = req.body
+
+    if (!username || !email || !password) {
+        return res.status(400).json({
+            message: "Please provide username, email and password"
+        })
+    }
+
+    const isUserAlreadyExists = await userModel.findOne({
+        $or: [ { username }, { email } ]
+    })
+
+    if (isUserAlreadyExists) {
+        return res.status(400).json({
+            message: "Account already exists with this email address or username"
+        })
+    }
+
+    const hash = await bcrypt.hash(password, 10)
+
+    const user = await userModel.create({
+        username,
+        email,
+        password: hash
+    })
+
+    const token = jwt.sign(
+        { id: user._id, username: user.username },
+        process.env.JWT_SECRET,
+        { expiresIn: "1d" }
+    )
+
+    res.cookie("token", token)
+
+    res.status(201).json({
+        message: "User registered successfully",
+        user: {
+            id: user._id,
+            username: user.username,
+            email: user.email
+        }
+    })
+}
+```
+
+<Note>
+After successful registration, a JWT token is automatically generated and set as an HTTP-only cookie, logging the user in immediately.
+</Note>
+
+### User Login
+
+Existing users authenticate with their email and password.
+
+**API Endpoint:** `POST /api/auth/login`
+
+**Request Body:**
+```json
+{
+  "email": "john@example.com",
+  "password": "securePassword123"
+}
+```
+
+**Backend Flow:**
+
+The login controller validates credentials and issues a JWT token:
+
+```javascript auth.controller.js:65-100
+async function loginUserController(req, res) {
+    const { email, password } = req.body
+
+    const user = await userModel.findOne({ email })
+
+    if (!user) {
+        return res.status(400).json({
+            message: "Invalid email or password"
+        })
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password)
+
+    if (!isPasswordValid) {
+        return res.status(400).json({
+            message: "Invalid email or password"
+        })
+    }
+
+    const token = jwt.sign(
+        { id: user._id, username: user.username },
+        process.env.JWT_SECRET,
+        { expiresIn: "1d" }
+    )
+
+    res.cookie("token", token)
+    res.status(200).json({
+        message: "User loggedIn successfully.",
+        user: {
+            id: user._id,
+            username: user.username,
+            email: user.email
+        }
+    })
+}
+```
+
+### User Logout
+
+Secure logout with token blacklisting prevents reuse of expired tokens.
+
+**API Endpoint:** `GET /api/auth/logout`
+
+**Backend Flow:**
+
+The logout controller adds the current token to a blacklist and clears the cookie:
+
+```javascript auth.controller.js:108-120
+async function logoutUserController(req, res) {
+    const token = req.cookies.token
+
+    if (token) {
+        await tokenBlacklistModel.create({ token })
+    }
+
+    res.clearCookie("token")
+
+    res.status(200).json({
+        message: "User logged out successfully"
+    })
+}
+```
+
+<Info>
+Blacklisted tokens are stored in the database to prevent token reuse even before expiration. The auth middleware checks against this blacklist on every protected request.
+</Info>
+
+## User Interface Flows
+
+### Registration Page
+
+The registration form collects username, email, and password from new users:
+
+<Tabs>
+  <Tab title="User Experience">
+    1. User navigates to `/register`
+    2. Fills in username, email, and password fields
+    3. Clicks "Register" button
+    4. On success, automatically redirected to home page (`/`) as authenticated user
+    5. Loading state displayed during registration
+  </Tab>
+  <Tab title="Frontend Code">
+    ```jsx Register.jsx:14-18
+    const handleSubmit = async (e) => {
+        e.preventDefault()
+        await handleRegister({username,email,password})
+        navigate("/")
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Login Page
+
+Existing users authenticate through the login form:
+
+<Tabs>
+  <Tab title="User Experience">
+    1. User navigates to `/login`
+    2. Enters email and password
+    3. Clicks "Login" button
+    4. On success, redirected to home page (`/`)
+    5. Link to registration page for new users
+  </Tab>
+  <Tab title="Frontend Code">
+    ```jsx Login.jsx:14-18
+    const handleSubmit = async (e) => {
+        e.preventDefault()
+        await handleLogin({email,password})
+        navigate('/')
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Authentication Middleware
+
+Protected routes use the `authUser` middleware to verify JWT tokens and check the blacklist:
+
+```javascript auth.middleware.js:6-40
+async function authUser(req, res, next) {
+    const token = req.cookies.token
+
+    if (!token) {
+        return res.status(401).json({
+            message: "Token not provided."
+        })
+    }
+
+    const isTokenBlacklisted = await tokenBlacklistModel.findOne({
+        token
+    })
+
+    if (isTokenBlacklisted) {
+        return res.status(401).json({
+            message: "token is invalid"
+        })
+    }
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET)
+
+        req.user = decoded
+
+        next()
+
+    } catch (err) {
+        return res.status(401).json({
+            message: "Invalid token."
+        })
+    }
+}
+```
+
+**Middleware validates:**
+- Token exists in cookies
+- Token is not blacklisted
+- Token signature is valid
+- Token is not expired
+
+## Data Models
+
+### User Schema
+
+```javascript user.model.js:4-21
+const userSchema = new mongoose.Schema({
+    username: {
+        type: String,
+        unique: [ true, "username already taken" ],
+        required: true,
+    },
+
+    email: {
+        type: String,
+        unique: [ true, "Account already exists with this email address" ],
+        required: true,
+    },
+
+    password: {
+        type: String,
+        required: true
+    }
+})
+```
+
+### Token Blacklist Schema
+
+```javascript blacklist.model.js:4-11
+const blacklistTokenSchema = new mongoose.Schema({
+    token: {
+        type: String,
+        required: [ true, "token is required to be added in blacklist" ]
+    }
+}, {
+    timestamps: true
+})
+```
+
+## Protected Routes
+
+Routes that require authentication use the `authUser` middleware:
+
+```javascript auth.routes.js:36
+authRouter.get("/get-me", authMiddleware.authUser, authController.getMeController)
+```
+
+**Examples of protected endpoints:**
+- `GET /api/auth/get-me` - Get current user details
+- `POST /api/interview/` - Generate interview report
+- `GET /api/interview/` - Get all user's interview reports
+- `POST /api/interview/resume/pdf/:interviewReportId` - Generate resume PDF
+
+## Security Features
+
+<CardGroup cols={2}>
+  <Card title="Password Hashing" icon="lock">
+    Passwords are hashed with bcrypt (10 rounds) before database storage
+  </Card>
+  <Card title="HTTP-Only Cookies" icon="cookie">
+    JWT tokens stored in HTTP-only cookies prevent XSS attacks
+  </Card>
+  <Card title="Token Blacklisting" icon="ban">
+    Logged-out tokens are blacklisted to prevent reuse
+  </Card>
+  <Card title="Token Expiration" icon="clock">
+    JWT tokens expire after 24 hours (1 day)
+  </Card>
+</CardGroup>
+
+## Get Current User
+
+Authenticated users can retrieve their profile information:
+
+**API Endpoint:** `GET /api/auth/get-me`
+
+**Requires:** Valid JWT token in cookies
+
+**Response:**
+```json
+{
+  "message": "User details fetched successfully",
+  "user": {
+    "id": "507f1f77bcf86cd799439011",
+    "username": "johndoe",
+    "email": "john@example.com"
+  }
+}
+```
+
+<Note>
+The password hash is never returned in API responses for security.
+</Note>

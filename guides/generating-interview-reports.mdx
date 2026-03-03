@@ -1,0 +1,413 @@
+---
+title: Generating Interview Reports
+description: Step-by-step guide to generate AI-powered interview reports with all available options
+---
+
+## Overview
+
+Interview reports provide comprehensive preparation materials for job interviews, including:
+
+- **Match Score**: How well your profile matches the job (0-100)
+- **Technical Questions**: Role-specific questions with suggested answers
+- **Behavioral Questions**: Situational questions and response strategies
+- **Skill Gaps**: Areas for improvement with severity ratings
+- **Preparation Plan**: Day-by-day study plan
+
+## Prerequisites
+
+Before generating an interview report, ensure you have:
+
+<Check>Registered account and active session</Check>
+<Check>Job description ready</Check>
+<Check>Resume file (PDF/DOCX) OR self-description text</Check>
+
+## Generate Interview Report
+
+<Steps>
+  <Step title="Authenticate Your Request">
+    All interview generation requests require authentication. Include your session cookie:
+    
+    ```javascript
+    credentials: "include" // In fetch requests
+    ```
+    
+    The `authMiddleware.authUser` validates your session (see `interview.routes.js:15`).
+  </Step>
+  
+  <Step title="Prepare Your Input Data">
+    Gather the required and optional fields:
+    
+    ### Required Fields
+    
+    - **jobDescription** (string): Complete job posting or description
+    
+    ### Optional Fields
+    
+    - **resume** (file): Your resume in PDF or DOCX format
+    - **selfDescription** (string): Additional information about yourself
+    - **title** (string): Job title (auto-derived from job description if omitted)
+    
+    <Note>
+    You must provide either a `resume` file OR `selfDescription` text. Both are recommended for best results.
+    </Note>
+  </Step>
+  
+  <Step title="Submit the Request">
+    Send a `POST` request to `/api/interview/` with `multipart/form-data`:
+    
+    ```javascript
+    const formData = new FormData()
+    
+    // Required
+    formData.append("jobDescription", `
+      Senior Full-Stack Engineer
+      
+      We're looking for an experienced engineer with:
+      - 5+ years of React and Node.js
+      - Experience with microservices
+      - Strong system design skills
+    `)
+    
+    // Optional but recommended
+    formData.append("resume", resumeFile)
+    formData.append("selfDescription", 
+      "7 years of full-stack development, led 3 major projects...")
+    formData.append("title", "Senior Full-Stack Engineer")
+    
+    const response = await fetch("http://localhost:3000/api/interview/", {
+      method: "POST",
+      body: formData,
+      credentials: "include"
+    })
+    
+    const data = await response.json()
+    ```
+    
+    From `interview.api.js:12-32`.
+  </Step>
+  
+  <Step title="Resume Processing">
+    The server processes your resume through multiple stages:
+    
+    1. **File Type Detection**: Magic byte analysis identifies PDF or DOCX
+    2. **Text Extraction**: Libraries extract readable text
+    3. **Fallback Parsing**: If extraction fails, AI reads the file directly
+    
+    Implementation in `interview.controller.js:40-84`.
+  </Step>
+  
+  <Step title="AI Analysis">
+    Your resume and job description are analyzed by Google Gemini AI:
+    
+    ```javascript
+    const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: zodToJsonSchema(interviewReportSchema)
+        }
+    })
+    ```
+    
+    The AI generates structured data including questions, skill gaps, and preparation plans.
+    
+    See `ai.service.js:63-70` for implementation.
+  </Step>
+  
+  <Step title="Receive Interview Report">
+    The response includes your complete interview report:
+    
+    ```json
+    {
+      "message": "Interview report generated successfully.",
+      "interviewReport": {
+        "_id": "60f7b3b3b3b3b3b3b3b3b3b3",
+        "title": "Senior Full-Stack Engineer",
+        "matchScore": 85,
+        "technicalQuestions": [
+          {
+            "question": "Explain the event loop in Node.js",
+            "intention": "Assess deep understanding of async programming",
+            "answer": "The event loop is the mechanism that..."
+          }
+        ],
+        "behavioralQuestions": [
+          {
+            "question": "Tell me about a time you led a critical project",
+            "intention": "Evaluate leadership and project management skills",
+            "answer": "Use STAR method: Situation, Task, Action, Result..."
+          }
+        ],
+        "skillGaps": [
+          {
+            "skill": "System Design at Scale",
+            "severity": "medium"
+          }
+        ],
+        "preparationPlan": [
+          {
+            "day": 1,
+            "focus": "Node.js Core Concepts",
+            "tasks": [
+              "Review event loop documentation",
+              "Practice async/await patterns"
+            ]
+          }
+        ],
+        "createdAt": "2024-01-15T10:30:00.000Z",
+        "updatedAt": "2024-01-15T10:30:00.000Z"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Understanding the Response
+
+### Match Score
+
+```javascript
+matchScore: 85 // 0-100 scale
+```
+
+Indicates how well your profile aligns with the job requirements. Defined in `ai.service.js:12` and validated in `interviewReport.model.js:78-82`.
+
+<Tip>
+A match score above 70 indicates strong alignment. Scores below 50 suggest significant skill gaps.
+</Tip>
+
+### Technical Questions
+
+Each technical question includes:
+
+- **question**: The actual interview question
+- **intention**: Why the interviewer asks this
+- **answer**: How to approach your response
+
+Schema defined in `interviewReport.model.js:4-19` and `ai.service.js:13-17`.
+
+### Behavioral Questions
+
+Structured identically to technical questions but focused on:
+
+- Leadership scenarios
+- Conflict resolution
+- Team collaboration
+- Problem-solving approaches
+
+Schema in `interviewReport.model.js:21-36`.
+
+### Skill Gaps
+
+Identifies areas for improvement:
+
+```javascript
+{
+  "skill": "Microservices Architecture",
+  "severity": "high" // low | medium | high
+}
+```
+
+Severity indicates impact on your candidacy:
+
+- **low**: Nice to have, won't significantly impact chances
+- **medium**: Important but can be learned quickly
+- **high**: Critical gap that may affect hiring decision
+
+Defined in `interviewReport.model.js:38-50`.
+
+### Preparation Plan
+
+Day-by-day study schedule:
+
+```javascript
+{
+  "day": 3,
+  "focus": "System Design Patterns",
+  "tasks": [
+    "Read 'Designing Data-Intensive Applications' Ch. 1-3",
+    "Watch system design video on YouTube",
+    "Practice designing a URL shortener"
+  ]
+}
+```
+
+Schema in `interviewReport.model.js:52-65`.
+
+## Complete Example
+
+### Frontend Implementation
+
+```javascript
+import { generateInterviewReport } from './features/interview/services/interview.api'
+
+async function createInterviewReport() {
+  try {
+    const resumeFile = document.getElementById('resume').files[0]
+    
+    const result = await generateInterviewReport({
+      jobDescription: document.getElementById('jobDesc').value,
+      selfDescription: document.getElementById('selfDesc').value,
+      resumeFile: resumeFile
+    })
+    
+    console.log('Report ID:', result.interviewReport._id)
+    console.log('Match Score:', result.interviewReport.matchScore)
+    
+    // Navigate to report view
+    window.location.href = `/interview/${result.interviewReport._id}`
+    
+  } catch (error) {
+    if (error.response?.status === 400) {
+      alert('Please check your input: ' + error.response.data.message)
+    } else if (error.response?.status === 502) {
+      alert('AI service temporarily unavailable. Please try again.')
+    } else {
+      alert('An error occurred. Please try again.')
+    }
+  }
+}
+```
+
+### Backend Flow
+
+The complete processing flow in `interview.controller.js:12-131`:
+
+1. Validate `jobDescription` is present (lines 16-21)
+2. Ensure either `resume` or `selfDescription` exists (lines 25-29)
+3. Derive `title` if not provided (lines 33-35)
+4. Process uploaded resume file (lines 40-84)
+5. Generate AI interview report (lines 94-100)
+6. Save to database (lines 109-117)
+7. Return complete report (lines 127-130)
+
+## Error Handling
+
+### Validation Errors (400)
+
+```json
+{
+  "message": "Job description is required (send as 'jobDescription')."
+}
+```
+
+```json
+{
+  "message": "Either a resume file (field 'resume') or 'selfDescription' is required."
+}
+```
+
+```json
+{
+  "message": "Unsupported resume file type. Please upload a PDF or DOCX."
+}
+```
+
+### AI Service Errors (502)
+
+```json
+{
+  "message": "AI service failed to generate interview report. Please try again."
+}
+```
+
+This occurs when the Google Gemini API is unavailable or returns an error. Implementation in `interview.controller.js:101-105`.
+
+### Database Errors (400)
+
+Validation errors from MongoDB:
+
+```json
+{
+  "message": "InterviewReport validation failed: title: Job title is required"
+}
+```
+
+Handled in `interview.controller.js:119-123`.
+
+## Retrieving Interview Reports
+
+### Get Single Report
+
+```javascript
+GET /api/interview/report/:interviewId
+```
+
+Returns the full interview report including all questions and preparation plans:
+
+```javascript
+import { getInterviewReportById } from './interview.api'
+
+const report = await getInterviewReportById('60f7b3b3b3b3b3b3b3b3b3b3')
+console.log(report.interviewReport.technicalQuestions)
+```
+
+Implementation in `interview.controller.js:137-153`.
+
+### Get All Reports
+
+```javascript
+GET /api/interview/
+```
+
+Returns all reports for the authenticated user (most recent first):
+
+```javascript
+import { getAllInterviewReports } from './interview.api'
+
+const reports = await getAllInterviewReports()
+console.log(`You have ${reports.interviewReports.length} reports`)
+```
+
+<Note>
+The list endpoint excludes detailed content (questions, skill gaps, etc.) for performance. Use the single report endpoint to get full details.
+</Note>
+
+See `interview.controller.js:159-166` for implementation.
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Provide Detailed Job Descriptions" icon="file-lines">
+    Include specific requirements, responsibilities, and preferred qualifications for more accurate analysis.
+  </Card>
+  
+  <Card title="Use Both Resume and Self-Description" icon="user-pen">
+    Resumes provide structure; self-descriptions add context and personal narrative.
+  </Card>
+  
+  <Card title="Keep Job Descriptions Current" icon="calendar-check">
+    Generate new reports for each job application - generic reports are less effective.
+  </Card>
+  
+  <Card title="Review Skill Gaps Honestly" icon="chart-line">
+    Focus preparation on high-severity gaps first for maximum impact.
+  </Card>
+</CardGroup>
+
+## Tips for Better Results
+
+<Tip>
+**Include company context**: If the job description lacks company information, add it to your self-description. Example: "Applying to a fintech startup focused on blockchain payments."
+</Tip>
+
+<Tip>
+**Specify your experience level**: Mention years of experience and seniority in your self-description for more appropriate question difficulty.
+</Tip>
+
+<Tip>
+**Mention interview format**: If you know the interview structure (e.g., "2 technical rounds + system design"), include it for tailored preparation plans.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Generate Resume PDFs" icon="file-pdf" href="/guides/generating-resume-pdfs">
+    Create tailored resume PDFs optimized for specific job applications
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/interview/create-report">
+    View complete API documentation and request/response schemas
+  </Card>
+</CardGroup>

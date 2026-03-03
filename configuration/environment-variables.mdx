@@ -1,0 +1,163 @@
+---
+title: 'Environment Variables'
+description: 'Configure your Resume Generator application with environment variables'
+---
+
+The Resume Generator application requires several environment variables to be configured before running. These variables control database connections, authentication, and AI service integration.
+
+## Setting Up Environment Variables
+
+<Steps>
+  <Step title="Create .env file">
+    Create a `.env` file in the `backend` directory of your project:
+    ```bash
+    cd backend
+    touch .env
+    ```
+  </Step>
+  
+  <Step title="Add required variables">
+    Add all the environment variables listed below to your `.env` file.
+  </Step>
+  
+  <Step title="Verify configuration">
+    Ensure all required variables are set before starting the application. The server will fail to start if critical variables are missing.
+  </Step>
+</Steps>
+
+## Required Variables
+
+### MONGO_URI
+
+<ParamField path="MONGO_URI" type="string" required>
+  MongoDB connection string for your database.
+  
+  **Usage**: The application connects to MongoDB using this URI in `src/config/database.js:8`
+  
+  **Format**: 
+  ```
+  mongodb://localhost:27017/resume-generator
+  ```
+  Or for MongoDB Atlas:
+  ```
+  mongodb+srv://<username>:<password>@cluster.mongodb.net/resume-generator
+  ```
+  
+  **Example**:
+  ```bash
+  MONGO_URI=mongodb://localhost:27017/resume-generator
+  ```
+</ParamField>
+
+### JWT_SECRET
+
+<ParamField path="JWT_SECRET" type="string" required>
+  Secret key used for signing and verifying JSON Web Tokens (JWT) for user authentication.
+  
+  **Usage**: Used in authentication controllers and middleware:
+  - `src/controllers/auth.controller.js:41` - Token generation during registration
+  - `src/controllers/auth.controller.js:87` - Token generation during login
+  - `src/middlewares/auth.middleware.js:27` - Token verification
+  
+  **Example**:
+  ```bash
+  JWT_SECRET=your-super-secret-key-here-change-this-in-production
+  ```
+</ParamField>
+
+<Warning>
+  **Security Best Practices for JWT_SECRET**:
+  - Use a strong, randomly generated string (minimum 32 characters)
+  - Never commit your JWT_SECRET to version control
+  - Use different secrets for development and production environments
+  - Rotate your secret periodically in production
+  - Generate a secure secret using: `openssl rand -base64 32`
+</Warning>
+
+### GOOGLE_GENAI_API_KEY
+
+<ParamField path="GOOGLE_GENAI_API_KEY" type="string" required>
+  API key for Google Gemini AI service used to generate interview reports and resumes.
+  
+  **Usage**: Initializes the Google GenAI client in `src/services/ai.service.js:7`
+  
+  The AI service uses the Gemini 3 Flash Preview model to:
+  - Generate personalized interview reports with match scores
+  - Create technical and behavioral interview questions
+  - Identify skill gaps and provide preparation plans
+  - Generate ATS-friendly resume PDFs
+  
+  **Example**:
+  ```bash
+  GOOGLE_GENAI_API_KEY=AIzaSyD...
+  ```
+</ParamField>
+
+<Warning>
+  **API Key Security**:
+  - Keep your API key confidential and never expose it in client-side code
+  - Do not commit API keys to version control
+  - Monitor your API usage in Google AI Studio
+  - Set up usage limits and quotas to prevent unexpected charges
+  - Rotate your API key if compromised
+</Warning>
+
+## Complete .env Example
+
+Here's a complete example of a `.env` file with all required variables:
+
+```bash
+# Database Configuration
+MONGO_URI=mongodb://localhost:27017/resume-generator
+
+# Authentication
+JWT_SECRET=your-super-secret-key-minimum-32-characters-long
+
+# AI Service
+GOOGLE_GENAI_API_KEY=AIzaSyD...
+```
+
+## Loading Environment Variables
+
+The application loads environment variables using the `dotenv` package at application startup:
+
+```javascript
+require("dotenv").config()
+```
+
+This is configured in `server.js:1` and runs before any other application code.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Database connection fails">
+    - Verify your `MONGO_URI` is correctly formatted
+    - Ensure MongoDB is running (for local connections)
+    - Check network connectivity (for Atlas connections)
+    - Verify database user credentials have proper permissions
+  </Accordion>
+  
+  <Accordion title="JWT token errors">
+    - Ensure `JWT_SECRET` is set and not empty
+    - Verify the secret is the same across all application instances
+    - Check that the secret hasn't been changed while users have active sessions
+  </Accordion>
+  
+  <Accordion title="AI service errors">
+    - Verify your `GOOGLE_GENAI_API_KEY` is valid and active
+    - Check you have sufficient quota in Google AI Studio
+    - Ensure the API key has access to the Gemini models
+    - Review rate limits and try again later if throttled
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Database Setup" icon="database" href="/configuration/database-setup">
+    Configure MongoDB and understand the database schema
+  </Card>
+  <Card title="AI Setup" icon="brain" href="/configuration/ai-setup">
+    Set up Google Gemini API and configure AI services
+  </Card>
+</CardGroup>

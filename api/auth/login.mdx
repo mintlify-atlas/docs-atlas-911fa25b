@@ -1,0 +1,131 @@
+---
+title: 'Login User'
+api: 'POST /api/auth/login'
+description: 'Authenticate a user with email and password'
+---
+
+## Description
+
+Authenticates an existing user with their email and password credentials. Upon successful login, a JWT token is automatically set as an HTTP-only cookie with a 1-day expiration.
+
+## Request Body
+
+<ParamField body="email" type="string" required>
+  The email address of the user account
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The password for the user account
+</ParamField>
+
+## Response
+
+<ResponseField name="message" type="string">
+  Success message indicating the user logged in successfully
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  The authenticated user object
+  
+  <Expandable title="user properties">
+    <ResponseField name="id" type="string">
+      The unique identifier of the authenticated user
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      The username of the authenticated user
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      The email address of the authenticated user
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Success Response (200)
+
+```json
+{
+  "message": "User loggedIn successfully.",
+  "user": {
+    "id": "507f1f77bcf86cd799439011",
+    "username": "johndoe",
+    "email": "john@example.com"
+  }
+}
+```
+
+A JWT token is automatically set as an HTTP-only cookie named `token` with a 1-day expiration. The token contains:
+- `id`: User's unique identifier
+- `username`: User's username
+- `exp`: Token expiration timestamp
+
+### Error Responses
+
+<ResponseExample>
+```json 400 - Invalid Credentials
+{
+  "message": "Invalid email or password"
+}
+```
+</ResponseExample>
+
+<Note>
+  The same error message is returned for both invalid email and invalid password to prevent user enumeration attacks.
+</Note>
+
+## Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.example.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -c cookies.txt \
+  -d '{
+    "email": "john@example.com",
+    "password": "securePassword123"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/auth/login', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    email: 'john@example.com',
+    password: 'securePassword123'
+  }),
+  credentials: 'include' // Important: Include cookies
+});
+
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+session = requests.Session()
+
+response = session.post(
+    'https://api.example.com/api/auth/login',
+    json={
+        'email': 'john@example.com',
+        'password': 'securePassword123'
+    }
+)
+
+data = response.json()
+# Session now contains the authentication cookie
+```
+</CodeGroup>
+
+## Implementation Details
+
+- Password verification uses bcrypt.compare() for secure comparison
+- JWT tokens are signed with `JWT_SECRET` environment variable
+- Token expiration is set to 1 day (24 hours)
+- The cookie is set automatically by the server
+- No authentication required (public endpoint)
+- Returns the same error message for invalid email or password to prevent user enumeration

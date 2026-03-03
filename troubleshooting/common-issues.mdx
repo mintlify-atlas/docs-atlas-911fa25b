@@ -1,0 +1,309 @@
+---
+title: Common Issues
+description: Troubleshoot common problems in Resume Generator
+---
+
+## Overview
+
+This guide covers the most frequently encountered issues when using the Resume Generator application and their solutions.
+
+---
+
+## Authentication Issues
+
+<AccordionGroup>
+  <Accordion title="JWT error: secretOrPrivateKey must have a value">
+    This error occurs when the `JWT_SECRET` environment variable is missing or empty.
+
+    **Error Location:** `backend/src/controllers/auth.controller.js:39-43`, `backend/src/middlewares/auth.middleware.js:27`
+
+    **Solution:**
+    1. Create or edit `backend/.env` file
+    2. Add the following line:
+       ```env
+       JWT_SECRET=your_long_random_secret_key_here
+       ```
+    3. Generate a secure secret using:
+       ```bash
+       node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+       ```
+    4. Restart the backend server
+
+    <Warning>
+      Never commit your `.env` file to version control. If you accidentally exposed your JWT secret, rotate it immediately.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Token not provided">
+    **Error Message:** `"Token not provided."`
+
+    **Cause:** The authentication token cookie is missing from the request.
+
+    **Error Location:** `backend/src/middlewares/auth.middleware.js:10-14`
+
+    **Solutions:**
+    - Ensure you're logged in before accessing protected routes
+    - Check that cookies are enabled in your browser
+    - Verify CORS settings allow credentials:
+      ```javascript
+      cors({
+        origin: "http://localhost:5173",
+        credentials: true
+      })
+      ```
+    - Clear browser cache and login again
+  </Accordion>
+
+  <Accordion title="Invalid token">
+    **Error Message:** `"Invalid token."`
+
+    **Cause:** The JWT token is malformed, expired, or signed with a different secret.
+
+    **Error Location:** `backend/src/middlewares/auth.middleware.js:33-37`
+
+    **Solutions:**
+    - Login again to get a fresh token (tokens expire after 1 day)
+    - Verify `JWT_SECRET` hasn't changed in `.env`
+    - Clear cookies and re-authenticate
+  </Accordion>
+
+  <Accordion title="Token is invalid (blacklisted)">
+    **Error Message:** `"token is invalid"`
+
+    **Cause:** The token has been blacklisted after logout.
+
+    **Error Location:** `backend/src/middlewares/auth.middleware.js:16-24`
+
+    **Solution:**
+    - This is expected behavior after logout
+    - Simply login again to get a new valid token
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Registration & Login Issues
+
+<AccordionGroup>
+  <Accordion title="Missing registration fields">
+    **Error Message:** `"Please provide username, email and password"`
+
+    **Cause:** One or more required fields are missing in the registration request.
+
+    **Error Location:** `backend/src/controllers/auth.controller.js:15-19`
+
+    **Solution:**
+    Ensure all three fields are provided in the request body:
+    ```json
+    {
+      "username": "johndoe",
+      "email": "john@example.com",
+      "password": "securePassword123"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Account already exists">
+    **Error Message:** `"Account already exists with this email address or username"`
+
+    **Cause:** A user with the same email or username already exists in the database.
+
+    **Error Location:** `backend/src/controllers/auth.controller.js:21-29`
+
+    **Solutions:**
+    - Use a different email address or username
+    - If you forgot your password, use the login endpoint with correct credentials
+    - Check for typos in email/username
+  </Accordion>
+
+  <Accordion title="Invalid email or password">
+    **Error Message:** `"Invalid email or password"`
+
+    **Cause:** Either the email doesn't exist or the password is incorrect.
+
+    **Error Location:** `backend/src/controllers/auth.controller.js:71-74`, `79-82`
+
+    **Solutions:**
+    - Verify your email is correctly spelled
+    - Check your password (case-sensitive)
+    - If you're a new user, register first
+    - Ensure you're using the email (not username) to login
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Interview Report Generation Issues
+
+<AccordionGroup>
+  <Accordion title="Job description is required">
+    **Error Message:** `"Job description is required (send as 'jobDescription')."`
+
+    **Cause:** The `jobDescription` field is missing or empty.
+
+    **Error Location:** `backend/src/controllers/interview.controller.js:16-21`
+
+    **Solution:**
+    Always include a non-empty `jobDescription` field in your request:
+    ```javascript
+    const formData = new FormData();
+    formData.append('jobDescription', 'Full job description text here');
+    formData.append('title', 'Senior Developer'); // optional
+    ```
+  </Accordion>
+
+  <Accordion title="Either resume file or selfDescription is required">
+    **Error Message:** `"Either a resume file (field 'resume') or 'selfDescription' is required."`
+
+    **Cause:** Neither a resume file nor a self-description was provided.
+
+    **Error Location:** `backend/src/controllers/interview.controller.js:25-29`
+
+    **Solution:**
+    Provide at least one of the following:
+    - Upload a resume file (PDF or DOCX)
+    - Include a `selfDescription` text field
+    - Or provide both for best results
+
+    ```javascript
+    // Option 1: Resume file
+    formData.append('resume', fileBlob, 'resume.pdf');
+
+    // Option 2: Self description
+    formData.append('selfDescription', 'I am a software engineer with 5 years experience...');
+
+    // Option 3: Both (recommended)
+    formData.append('resume', fileBlob, 'resume.pdf');
+    formData.append('selfDescription', 'Additional context...');
+    ```
+  </Accordion>
+
+  <Accordion title="AI service failed to generate report">
+    **Error Message:** `"AI service failed to generate interview report. Please try again."`
+
+    **Cause:** The Google Gemini API returned an error or timed out.
+
+    **Error Location:** `backend/src/controllers/interview.controller.js:101-105`
+
+    **Solutions:**
+    - Verify `GOOGLE_GENAI_API_KEY` is set in `backend/.env`
+    - Check your API key is valid and not expired
+    - Ensure you have available quota in your Google AI account
+    - Check your internet connection
+    - Try again after a few moments (temporary API issues)
+    - Reduce the size of your job description or resume if they're very large
+  </Accordion>
+
+  <Accordion title="Interview report not found">
+    **Error Message:** `"Interview report not found."`
+
+    **Cause:** The requested interview report doesn't exist or doesn't belong to your user.
+
+    **Error Location:** `backend/src/controllers/interview.controller.js:143-147`, `177-181`
+
+    **Solutions:**
+    - Verify the interview report ID is correct
+    - Ensure you're logged in as the user who created the report
+    - Check that the report wasn't deleted
+    - Use `GET /api/interview/` to list all your reports
+  </Accordion>
+
+  <Accordion title="Validation errors">
+    **Error Message:** Varies based on missing field (e.g., `"Job description is required"`, `"Job title is required"`)
+
+    **Cause:** The AI-generated report is missing required fields for database storage.
+
+    **Error Location:** `backend/src/controllers/interview.controller.js:119-123`
+
+    **Solutions:**
+    - This is usually an internal error; try generating the report again
+    - Ensure your job description is clear and well-formatted
+    - Contact support if the issue persists
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## File Upload Issues
+
+<AccordionGroup>
+  <Accordion title="File size exceeds limit">
+    **Error:** Upload fails silently or returns an error
+
+    **Cause:** The uploaded file exceeds the 5MB limit.
+
+    **Limit Location:** `backend/src/middlewares/file.middleware.js:6-8`
+
+    **Solution:**
+    - Compress your PDF or DOCX file to under 5MB
+    - Remove unnecessary images or formatting
+    - Use PDF compression tools
+    - Convert to a simpler format if possible
+
+    <Note>
+      Maximum file size: **5MB** (5 * 1024 * 1024 bytes)
+    </Note>
+  </Accordion>
+
+  <Accordion title="Unsupported resume file type">
+    **Error Message:** `"Unsupported resume file type. Please upload a PDF or DOCX."`
+
+    **Cause:** The uploaded file is not a PDF or DOCX format.
+
+    **Error Location:** `backend/src/controllers/interview.controller.js:62-66`
+
+    **Detection Logic:** The application checks:
+    1. Magic bytes (file signature): `%PDF` for PDF, `PK..` for DOCX
+    2. MIME type from the browser
+    3. File extension
+
+    **Supported Formats:**
+    - PDF (`.pdf`)
+    - Microsoft Word (`.docx`)
+
+    **Solution:**
+    - Convert your resume to PDF or DOCX format
+    - Avoid uploading `.doc` (old Word format), `.txt`, or image files
+    - Use "Save As" or "Export to PDF" from your word processor
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Server Connection Issues
+
+<Accordion title="Cannot connect to backend">
+  **Symptoms:**
+  - Frontend shows connection errors
+  - API requests fail with network errors
+
+  **Solutions:**
+  1. Verify backend is running:
+     ```bash
+     cd backend
+     npm run dev
+     ```
+     Should show: `"Server is running on port 3000"`
+
+  2. Check backend URL in frontend configuration
+     - Default: `http://localhost:3000`
+
+  3. Verify ports are not blocked by firewall
+
+  4. Check for port conflicts (another service using port 3000)
+
+  5. Review CORS configuration in `backend/src/app.js:9-12`
+</Accordion>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MongoDB Connection Issues" icon="database" href="/troubleshooting/mongodb-connection">
+    Resolve MongoDB Atlas connection and authentication problems
+  </Card>
+  <Card title="Resume Parsing Errors" icon="file-pdf" href="/troubleshooting/resume-parsing">
+    Fix issues with PDF/DOCX parsing and file format problems
+  </Card>
+</CardGroup>

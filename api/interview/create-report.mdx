@@ -1,0 +1,326 @@
+---
+title: 'Create Interview Report'
+api: 'POST /api/interview/'
+---
+
+Generate a new interview report based on user self description, resume file (PDF/DOCX), and job description.
+
+## Authentication
+
+This endpoint requires authentication. Include the JWT token in the Authorization header:
+
+```
+Authorization: Bearer <token>
+```
+
+## Request Body
+
+This endpoint accepts `multipart/form-data` with the following fields:
+
+<ParamField body="jobDescription" type="string" required>
+  The job description for the position the candidate is applying to. This field is required and cannot be empty.
+</ParamField>
+
+<ParamField body="title" type="string">
+  The title of the job position. If not provided, the system will derive a title from the job description or use "Untitled Position" as fallback.
+</ParamField>
+
+<ParamField body="jobTitle" type="string">
+  Alternative field name for job title. Used as fallback if `title` is not provided.
+</ParamField>
+
+<ParamField body="selfDescription" type="string">
+  A self-description or summary provided by the candidate. Either this field or the `resume` file must be provided.
+</ParamField>
+
+<ParamField body="resume" type="file">
+  Resume file upload. Accepts PDF or DOCX format. Either this field or `selfDescription` must be provided.
+  
+  **Supported formats:**
+  - PDF (`.pdf`) - Detected via magic bytes: `%PDF` (0x25 0x50 0x44 0x46)
+  - DOCX (`.docx`) - Detected via magic bytes: `PK..` (0x50 0x4b 0x03 0x04)
+  
+  **File detection:**
+  The system uses magic bytes detection for reliable file type identification, falling back to MIME type and file extension if needed.
+  
+  **Text extraction:**
+  - PDF files are parsed using `pdf-parse`
+  - DOCX files are parsed using `mammoth`
+  - If parsing fails (e.g., scanned PDFs), the file is sent directly to the AI service for processing
+</ParamField>
+
+## Example Request
+
+```bash
+curl -X POST https://api.example.com/api/interview/ \
+  -H "Authorization: Bearer <token>" \
+  -F "jobDescription=We are looking for a Senior Software Engineer with 5+ years of experience in React and Node.js..." \
+  -F "title=Senior Software Engineer" \
+  -F "selfDescription=I am a full-stack developer with 6 years of experience..." \
+  -F "resume=@/path/to/resume.pdf"
+```
+
+```javascript
+const formData = new FormData();
+formData.append('jobDescription', 'We are looking for a Senior Software Engineer...');
+formData.append('title', 'Senior Software Engineer');
+formData.append('selfDescription', 'I am a full-stack developer...');
+formData.append('resume', fileInput.files[0]);
+
+fetch('https://api.example.com/api/interview/', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`
+  },
+  body: formData
+});
+```
+
+## Response
+
+<ResponseField name="message" type="string">
+  Success message indicating the interview report was generated successfully.
+</ResponseField>
+
+<ResponseField name="interviewReport" type="object">
+  The generated interview report object.
+  
+  <Expandable title="interviewReport">
+    <ResponseField name="_id" type="string">
+      Unique identifier for the interview report.
+    </ResponseField>
+    
+    <ResponseField name="user" type="string">
+      User ID of the report owner.
+    </ResponseField>
+    
+    <ResponseField name="title" type="string">
+      Job title for the position.
+    </ResponseField>
+    
+    <ResponseField name="jobDescription" type="string">
+      The job description provided in the request.
+    </ResponseField>
+    
+    <ResponseField name="resume" type="string">
+      Extracted text content from the resume file.
+    </ResponseField>
+    
+    <ResponseField name="selfDescription" type="string">
+      Self-description provided by the candidate.
+    </ResponseField>
+    
+    <ResponseField name="matchScore" type="number">
+      A score between 0 and 100 indicating how well the candidate's profile matches the job description.
+    </ResponseField>
+    
+    <ResponseField name="technicalQuestions" type="array">
+      Technical questions that can be asked in the interview.
+      
+      <Expandable title="technicalQuestions[]">
+        <ResponseField name="question" type="string">
+          The technical question that can be asked in the interview.
+        </ResponseField>
+        
+        <ResponseField name="intention" type="string">
+          The intention of the interviewer behind asking this question.
+        </ResponseField>
+        
+        <ResponseField name="answer" type="string">
+          How to answer this question, what points to cover, what approach to take, etc.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="behavioralQuestions" type="array">
+      Behavioral questions that can be asked in the interview.
+      
+      <Expandable title="behavioralQuestions[]">
+        <ResponseField name="question" type="string">
+          The behavioral question that can be asked in the interview.
+        </ResponseField>
+        
+        <ResponseField name="intention" type="string">
+          The intention of the interviewer behind asking this question.
+        </ResponseField>
+        
+        <ResponseField name="answer" type="string">
+          How to answer this question, what points to cover, what approach to take, etc.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="skillGaps" type="array">
+      List of skill gaps in the candidate's profile.
+      
+      <Expandable title="skillGaps[]">
+        <ResponseField name="skill" type="string">
+          The skill which the candidate is lacking.
+        </ResponseField>
+        
+        <ResponseField name="severity" type="string">
+          The severity of this skill gap: `"low"`, `"medium"`, or `"high"`. Indicates how important this skill is for the job and how much it can impact the candidate's chances.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="preparationPlan" type="array">
+      A day-wise preparation plan for the candidate to follow.
+      
+      <Expandable title="preparationPlan[]">
+        <ResponseField name="day" type="number">
+          The day number in the preparation plan, starting from 1.
+        </ResponseField>
+        
+        <ResponseField name="focus" type="string">
+          The main focus of this day in the preparation plan (e.g., data structures, system design, mock interviews).
+        </ResponseField>
+        
+        <ResponseField name="tasks" type="array">
+          List of tasks to be done on this day (e.g., read a specific book or article, solve a set of problems, watch a video).
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      Timestamp when the report was created (ISO 8601 format).
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      Timestamp when the report was last updated (ISO 8601 format).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Success Response (201 Created)
+
+```json
+{
+  "message": "Interview report generated successfully.",
+  "interviewReport": {
+    "_id": "507f1f77bcf86cd799439011",
+    "user": "507f191e810c19729de860ea",
+    "title": "Senior Software Engineer",
+    "jobDescription": "We are looking for a Senior Software Engineer...",
+    "resume": "John Doe\nSoftware Engineer\n...",
+    "selfDescription": "I am a full-stack developer...",
+    "matchScore": 85,
+    "technicalQuestions": [
+      {
+        "question": "Can you explain the virtual DOM in React and how it improves performance?",
+        "intention": "To assess understanding of React's core concepts and performance optimization",
+        "answer": "The virtual DOM is a lightweight copy of the actual DOM. React uses it to minimize direct DOM manipulations by..."
+      }
+    ],
+    "behavioralQuestions": [
+      {
+        "question": "Tell me about a time when you had to work with a difficult team member.",
+        "intention": "To evaluate interpersonal skills and conflict resolution abilities",
+        "answer": "Use the STAR method: Situation, Task, Action, Result. Focus on how you..."
+      }
+    ],
+    "skillGaps": [
+      {
+        "skill": "Kubernetes",
+        "severity": "medium"
+      },
+      {
+        "skill": "GraphQL",
+        "severity": "low"
+      }
+    ],
+    "preparationPlan": [
+      {
+        "day": 1,
+        "focus": "React fundamentals and advanced concepts",
+        "tasks": [
+          "Review React hooks and their use cases",
+          "Practice implementing custom hooks",
+          "Study React performance optimization techniques"
+        ]
+      },
+      {
+        "day": 2,
+        "focus": "Node.js and backend architecture",
+        "tasks": [
+          "Review REST API design principles",
+          "Study microservices architecture patterns",
+          "Practice writing Express middleware"
+        ]
+      }
+    ],
+    "createdAt": "2026-03-03T10:30:00.000Z",
+    "updatedAt": "2026-03-03T10:30:00.000Z"
+  }
+}
+```
+
+## Error Responses
+
+### 400 Bad Request - Missing Job Description
+
+```json
+{
+  "message": "Job description is required (send as 'jobDescription')."
+}
+```
+
+### 400 Bad Request - Missing Resume and Self Description
+
+```json
+{
+  "message": "Either a resume file (field 'resume') or 'selfDescription' is required."
+}
+```
+
+### 400 Bad Request - Unsupported File Type
+
+```json
+{
+  "message": "Unsupported resume file type. Please upload a PDF or DOCX."
+}
+```
+
+### 400 Bad Request - Unable to Read Resume
+
+```json
+{
+  "message": "Unable to read the uploaded resume. Please upload a valid PDF/DOCX or provide 'selfDescription'."
+}
+```
+
+### 400 Bad Request - Empty Resume Content
+
+```json
+{
+  "message": "Could not extract text from the resume file. Please upload a text-based PDF/DOCX or provide 'selfDescription'."
+}
+```
+
+### 400 Bad Request - Validation Error
+
+```json
+{
+  "message": "Validation error message from MongoDB schema"
+}
+```
+
+### 401 Unauthorized
+
+Returned when the authentication token is missing or invalid.
+
+### 502 Bad Gateway - AI Service Error
+
+```json
+{
+  "message": "AI service failed to generate interview report. Please try again."
+}
+```
+
+## Notes
+
+- The AI service uses Google's Gemini 3 Flash Preview model to generate comprehensive interview reports
+- Resume text extraction supports both structured (text-based) and unstructured (scanned) documents
+- If local parsing fails, the system automatically falls back to sending the raw file to the AI service
+- The Zod schema defined in `ai.service.js` ensures structured and validated output from the AI model
+- Magic bytes detection provides robust file type identification, particularly useful for files uploaded from Windows systems where MIME types may be unreliable

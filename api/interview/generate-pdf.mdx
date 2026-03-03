@@ -1,0 +1,124 @@
+---
+title: 'Generate Resume PDF'
+api: 'POST /api/interview/resume/pdf/:interviewReportId'
+---
+
+Generate a tailored resume PDF based on an existing interview report. The resume is optimized for the specific job description and highlights relevant experience and skills.
+
+## Authentication
+
+This endpoint requires authentication. Include the JWT token in the Authorization header:
+
+```
+Authorization: Bearer <token>
+```
+
+## Path Parameters
+
+<ParamField path="interviewReportId" type="string" required>
+  The unique identifier of the interview report to use as the basis for generating the resume PDF. Must be a valid MongoDB ObjectId.
+</ParamField>
+
+## Example Request
+
+```bash
+curl -X POST https://api.example.com/api/interview/resume/pdf/507f1f77bcf86cd799439011 \
+  -H "Authorization: Bearer <token>" \
+  --output resume.pdf
+```
+
+```javascript
+fetch('https://api.example.com/api/interview/resume/pdf/507f1f77bcf86cd799439011', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+})
+  .then(response => response.blob())
+  .then(blob => {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'resume.pdf';
+    a.click();
+  });
+```
+
+## Response
+
+The endpoint returns a binary PDF file with the following headers:
+
+**Content-Type:** `application/pdf`
+
+**Content-Disposition:** `attachment; filename=resume_{interviewReportId}.pdf`
+
+### Success Response (200 OK)
+
+A PDF file is returned directly as binary data. The response headers include:
+
+```
+Content-Type: application/pdf
+Content-Disposition: attachment; filename=resume_507f1f77bcf86cd799439011.pdf
+```
+
+## Error Responses
+
+### 404 Not Found
+
+Returned when the interview report with the specified ID doesn't exist.
+
+```json
+{
+  "message": "Interview report not found."
+}
+```
+
+### 401 Unauthorized
+
+Returned when the authentication token is missing or invalid.
+
+## PDF Generation Process
+
+The resume PDF is generated through the following steps:
+
+1. **Retrieve Interview Report**: The system fetches the interview report including the original resume text, self-description, and job description
+
+2. **AI-Generated HTML**: Google's Gemini 3 Flash Preview model generates optimized HTML content based on:
+   - Original resume text
+   - Self-description
+   - Job description
+   
+   The AI tailors the resume to highlight relevant experience and skills for the specific position.
+
+3. **HTML to PDF Conversion**: The generated HTML is converted to PDF using Puppeteer with the following settings:
+   - **Format:** A4
+   - **Margins:**
+     - Top: 20mm
+     - Bottom: 20mm
+     - Left: 15mm
+     - Right: 15mm
+
+## Resume Characteristics
+
+The generated resume is designed to be:
+
+- **ATS-Friendly**: Easily parsable by Applicant Tracking Systems without losing important information
+- **Professional**: Simple, clean design with appropriate use of colors and font styles
+- **Concise**: Ideally 1-2 pages long, focusing on quality over quantity
+- **Tailored**: Highlights experience and skills most relevant to the job description
+- **Natural**: Content written to appear human-authored rather than AI-generated
+- **Well-Structured**: Organized with clear sections and visual hierarchy
+
+## Use Cases
+
+- Generate a customized resume for a specific job application after analyzing the match
+- Create multiple resume versions optimized for different job descriptions
+- Download and review the AI-tailored resume before submitting applications
+- Compare different resume formats for the same position
+
+## Notes
+
+- The PDF generation process may take a few seconds depending on the complexity of the resume
+- The generated resume is based on the Zod schema defined in `ai.service.js:100-102`
+- No rate limiting is currently enforced, but frequent regeneration for the same report may be optimized in future updates
+- The filename includes the interview report ID for easy identification: `resume_{interviewReportId}.pdf`

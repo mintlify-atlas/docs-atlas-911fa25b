@@ -1,0 +1,534 @@
+---
+title: Generating Resume PDFs
+description: How to generate tailored, ATS-friendly resume PDFs from interview reports
+---
+
+## Overview
+
+After generating an interview report, you can create a tailored resume PDF that:
+
+- Highlights relevant experience for the specific job
+- Uses ATS-friendly formatting
+- Presents professional, human-like content
+- Optimizes for 1-2 page length
+
+## How It Works
+
+The resume PDF generation process uses AI to rewrite your resume content specifically for the job you're applying to, then converts the HTML output to a professional PDF using Puppeteer.
+
+<Steps>
+  <Step title="Generate Interview Report First">
+    You must create an interview report before generating a resume PDF. The report ID is required:
+    
+    ```javascript
+    const { interviewReport } = await generateInterviewReport({
+      jobDescription: "Senior Backend Engineer...",
+      resumeFile: file,
+      selfDescription: "8 years of experience..."
+    })
+    
+    const reportId = interviewReport._id
+    ```
+  </Step>
+  
+  <Step title="Call the Resume PDF Endpoint">
+    Send a POST request to generate the PDF:
+    
+    ```javascript
+    POST /api/interview/resume/pdf/:interviewReportId
+    ```
+    
+    The endpoint is defined in `interview.routes.js:38`:
+    ```javascript
+    interviewRouter.post(
+      "/resume/pdf/:interviewReportId", 
+      authMiddleware.authUser, 
+      interviewController.generateResumePdfController
+    )
+    ```
+  </Step>
+  
+  <Step title="AI Generates HTML Resume">
+    The system retrieves your interview report data and sends it to Google Gemini AI:
+    
+    - Original resume content
+    - Job description
+    - Self-description
+    
+    The AI generates tailored HTML optimized for the specific role. Implementation in `ai.service.js:98-124`.
+  </Step>
+  
+  <Step title="HTML to PDF Conversion">
+    Puppeteer converts the HTML to a professionally formatted PDF:
+    
+    ```javascript
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      margin: {
+        top: "20mm",
+        bottom: "20mm",
+        left: "15mm",
+        right: "15mm"
+      }
+    })
+    ```
+    
+    From `ai.service.js:84-91`.
+  </Step>
+  
+  <Step title="Download PDF">
+    The server sends the PDF as a downloadable file:
+    
+    ```http
+    Content-Type: application/pdf
+    Content-Disposition: attachment; filename=resume_60f7b3b3b3b3b3b3b3b3b3b3.pdf
+    ```
+    
+    Implementation in `interview.controller.js:187-192`.
+  </Step>
+</Steps>
+
+## API Usage
+
+### Endpoint
+
+```
+POST /api/interview/resume/pdf/:interviewReportId
+```
+
+### Parameters
+
+| Parameter | Type | Location | Description |
+|-----------|------|----------|-------------|
+| `interviewReportId` | string | URL path | MongoDB ObjectId of the interview report |
+
+### Authentication
+
+Requires active session cookie:
+
+```javascript
+credentials: "include"
+```
+
+### Response
+
+Returns binary PDF data with appropriate headers:
+
+- **Content-Type**: `application/pdf`
+- **Content-Disposition**: `attachment; filename=resume_{reportId}.pdf`
+
+## JavaScript Example
+
+```javascript
+import { generateResumePdf } from './features/interview/services/interview.api'
+
+async function downloadResume(interviewReportId) {
+  try {
+    // Get PDF blob
+    const pdfBlob = await generateResumePdf({ interviewReportId })
+    
+    // Create download link
+    const url = window.URL.createObjectURL(pdfBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `resume_${interviewReportId}.pdf`
+    
+    // Trigger download
+    document.body.appendChild(link)
+    link.click()
+    
+    // Cleanup
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+  } catch (error) {
+    if (error.response?.status === 404) {
+      alert('Interview report not found')
+    } else {
+      alert('Failed to generate resume PDF')
+    }
+  }
+}
+```
+
+Based on `interview.api.js:60-66`.
+
+## Frontend Service Implementation
+
+The complete service method from `interview.api.js:60-66`:
+
+```javascript
+export const generateResumePdf = async ({ interviewReportId }) => {
+    const response = await api.post(
+      `/api/interview/resume/pdf/${interviewReportId}`, 
+      null, 
+      {
+        responseType: "blob"
+      }
+    )
+    
+    return response.data
+}
+```
+
+<Note>
+The `responseType: "blob"` option is critical for handling binary PDF data correctly.
+</Note>
+
+## Backend Implementation
+
+### Controller Flow
+
+From `interview.controller.js:172-193`:
+
+```javascript
+async function generateResumePdfController(req, res) {
+    const { interviewReportId } = req.params
+    
+    // 1. Fetch interview report
+    const interviewReport = await interviewReportModel.findById(interviewReportId)
+    
+    if (!interviewReport) {
+        return res.status(404).json({
+            message: "Interview report not found."
+        })
+    }
+    
+    // 2. Extract required data
+    const { resume, jobDescription, selfDescription } = interviewReport
+    
+    // 3. Generate PDF via AI service
+    const pdfBuffer = await generateResumePdf({ 
+      resume, 
+      jobDescription, 
+      selfDescription 
+    })
+    
+    // 4. Set response headers
+    res.set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename=resume_${interviewReportId}.pdf`
+    })
+    
+    // 5. Send PDF
+    res.send(pdfBuffer)
+}
+```
+
+### AI Service
+
+The AI generation process from `ai.service.js:98-132`:
+
+```javascript
+async function generateResumePdf({ resume, selfDescription, jobDescription }) {
+    
+    // Define schema for AI response
+    const resumePdfSchema = z.object({
+        html: z.string().describe(
+          "The HTML content of the resume which can be converted to PDF"
+        )
+    })
+    
+    // Create prompt
+    const prompt = `Generate resume for a candidate with the following details:
+                    Resume: ${resume}
+                    Self Description: ${selfDescription}
+                    Job Description: ${jobDescription}
+
+                    The resume should be tailored for the given job description 
+                    and should highlight the candidate's strengths and relevant experience.
+                    The HTML content should be well-formatted and structured, 
+                    making it easy to read and visually appealing.
+                    The content should not sound like it's generated by AI.
+                    The resume should ideally be 1-2 pages long when converted to PDF.
+                    Focus on quality rather than quantity.`
+    
+    // Call AI
+    const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: zodToJsonSchema(resumePdfSchema)
+        }
+    })
+    
+    // Parse response
+    const jsonContent = JSON.parse(response.text)
+    
+    // Convert HTML to PDF
+    const pdfBuffer = await generatePdfFromHtml(jsonContent.html)
+    
+    return pdfBuffer
+}
+```
+
+## PDF Configuration
+
+Puppeteer is configured for professional output:
+
+```javascript
+const pdfBuffer = await page.pdf({
+    format: "A4",      // Standard paper size
+    margin: {
+        top: "20mm",    // Professional margins
+        bottom: "20mm",
+        left: "15mm",
+        right: "15mm"
+    }
+})
+```
+
+From `ai.service.js:84-91`.
+
+<Tip>
+The A4 format and consistent margins ensure the resume looks professional when printed or viewed digitally.
+</Tip>
+
+## AI Resume Generation Guidelines
+
+The AI follows these principles when creating your resume:
+
+### Content Quality
+
+- **Tailored to Job**: Emphasizes experience and skills matching the job description
+- **Human-Like Writing**: Avoids AI-sounding language patterns
+- **Concise**: Targets 1-2 pages with high-quality content over quantity
+- **Relevant Details**: Highlights experiences that align with the role
+
+### ATS Optimization
+
+- **Parsable Structure**: Uses semantic HTML that ATS systems can read
+- **Keyword Rich**: Includes relevant keywords from the job description
+- **Standard Sections**: Education, Experience, Skills clearly delineated
+- **Clean Formatting**: No complex tables or graphics that confuse parsers
+
+### Visual Design
+
+- **Professional Styling**: Clean, modern design with appropriate spacing
+- **Selective Color**: Minimal color highlights for visual interest
+- **Readable Fonts**: Standard fonts that render consistently
+- **Clear Hierarchy**: Section headers, job titles, and dates are distinct
+
+See the complete prompt in `ai.service.js:104-115`.
+
+## Error Handling
+
+### Interview Report Not Found (404)
+
+```json
+{
+  "message": "Interview report not found."
+}
+```
+
+**Causes**:
+- Invalid `interviewReportId`
+- Report was deleted
+- Report belongs to a different user
+
+**Solution**: Verify the report ID and ensure it exists.
+
+### Authentication Required (401)
+
+No specific error body - the auth middleware redirects.
+
+**Cause**: No valid session cookie
+
+**Solution**: Ensure the user is logged in and include credentials:
+```javascript
+credentials: "include"
+```
+
+### AI Service Failure
+
+If the AI service fails, an error is thrown and handled by Express error middleware.
+
+**Common causes**:
+- Google Gemini API rate limits
+- API key issues
+- Network connectivity problems
+
+## Complete Example
+
+### Full Workflow: Report to PDF
+
+```javascript
+import { 
+  generateInterviewReport, 
+  generateResumePdf 
+} from './features/interview/services/interview.api'
+
+async function completeWorkflow() {
+  // Step 1: Generate interview report
+  const reportResult = await generateInterviewReport({
+    jobDescription: `
+      Senior Software Engineer - Backend
+      
+      Requirements:
+      - 5+ years Node.js experience
+      - Microservices architecture
+      - PostgreSQL and MongoDB
+      - AWS deployment
+    `,
+    resumeFile: document.getElementById('resume').files[0],
+    selfDescription: `
+      Senior backend engineer with 7 years building scalable APIs.
+      Led migration from monolith to microservices at previous company.
+      Deep experience with Node.js, Express, and database optimization.
+    `,
+    title: "Senior Software Engineer - Backend"
+  })
+  
+  const reportId = reportResult.interviewReport._id
+  console.log('Interview report created:', reportId)
+  console.log('Match score:', reportResult.interviewReport.matchScore)
+  
+  // Step 2: Generate tailored resume PDF
+  const pdfBlob = await generateResumePdf({ 
+    interviewReportId: reportId 
+  })
+  
+  // Step 3: Download PDF
+  const url = window.URL.createObjectURL(pdfBlob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `resume_backend_engineer.pdf`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+  
+  console.log('Resume PDF downloaded successfully')
+}
+```
+
+### React Component Example
+
+```jsx
+import { useState } from 'react'
+import { generateResumePdf } from '../services/interview.api'
+
+function ResumePdfButton({ interviewReportId }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  
+  const handleDownload = async () => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const pdfBlob = await generateResumePdf({ interviewReportId })
+      
+      const url = window.URL.createObjectURL(pdfBlob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `tailored_resume_${interviewReportId}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to generate PDF')
+    } finally {
+      setLoading(false)
+    }
+  }
+  
+  return (
+    <div>
+      <button 
+        onClick={handleDownload} 
+        disabled={loading}
+      >
+        {loading ? 'Generating PDF...' : 'Download Tailored Resume'}
+      </button>
+      {error && <p className="error">{error}</p>}
+    </div>
+  )
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Review Before Sending" icon="eye">
+    Always review the generated PDF before submitting to employers. Verify accuracy and formatting.
+  </Card>
+  
+  <Card title="Generate Per Application" icon="file-circle-plus">
+    Create a new tailored resume for each job application rather than using a generic version.
+  </Card>
+  
+  <Card title="Update Source Resume" icon="pen-to-square">
+    Keep your original resume current. Better source data produces better tailored resumes.
+  </Card>
+  
+  <Card title="Check File Size" icon="file-zipper">
+    PDFs are typically 50-200KB. Larger files may indicate issues with embedded content.
+  </Card>
+</CardGroup>
+
+## Tips for Better Resumes
+
+<Tip>
+**Provide detailed self-descriptions**: The more context you give about your work, the better the AI can highlight relevant achievements.
+</Tip>
+
+<Tip>
+**Include metrics in your original resume**: Numbers and quantifiable achievements translate well to tailored versions (e.g., "Reduced API latency by 40%").
+</Tip>
+
+<Tip>
+**Use the full job description**: Include requirements, responsibilities, and company info for better keyword matching.
+</Tip>
+
+<Warning>
+**Always fact-check**: The AI tailors your resume but should never fabricate experience. Verify all content is truthful.
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="PDF is blank or has rendering issues">
+    This can occur if:
+    - The AI generated invalid HTML
+    - Puppeteer failed to load resources
+    
+    **Solution**: Try generating again. The AI model occasionally produces non-standard HTML.
+  </Accordion>
+  
+  <Accordion title="Content doesn't match my resume">
+    The AI significantly rewrites your resume to match the job description.
+    
+    **Solution**: Ensure your original resume and self-description accurately represent your experience. The AI can only work with the information provided.
+  </Accordion>
+  
+  <Accordion title="PDF download fails in browser">
+    Browser security settings may block automatic downloads.
+    
+    **Solution**: 
+    - Check browser console for errors
+    - Ensure pop-ups aren't blocked
+    - Try a different browser
+  </Accordion>
+  
+  <Accordion title="Resume is too long/short">
+    The AI targets 1-2 pages but may vary based on your experience.
+    
+    **Solution**: Adjust your self-description length. More detailed input typically produces longer resumes.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Interview Reports Guide" icon="clipboard-list" href="/guides/generating-interview-reports">
+    Learn how to create comprehensive interview reports
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/interview/generate-pdf">
+    View complete API documentation for PDF generation
+  </Card>
+</CardGroup>

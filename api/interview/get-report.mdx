@@ -1,0 +1,283 @@
+---
+title: 'Get Interview Report'
+api: 'GET /api/interview/report/:interviewId'
+---
+
+Retrieve a specific interview report by its ID.
+
+## Authentication
+
+This endpoint requires authentication. Include the JWT token in the Authorization header:
+
+```
+Authorization: Bearer <token>
+```
+
+## Path Parameters
+
+<ParamField path="interviewId" type="string" required>
+  The unique identifier of the interview report to retrieve. Must be a valid MongoDB ObjectId.
+</ParamField>
+
+## Example Request
+
+```bash
+curl -X GET https://api.example.com/api/interview/report/507f1f77bcf86cd799439011 \
+  -H "Authorization: Bearer <token>"
+```
+
+```javascript
+fetch('https://api.example.com/api/interview/report/507f1f77bcf86cd799439011', {
+  method: 'GET',
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+```
+
+## Response
+
+<ResponseField name="message" type="string">
+  Success message indicating the interview report was fetched successfully.
+</ResponseField>
+
+<ResponseField name="interviewReport" type="object">
+  The complete interview report object.
+  
+  <Expandable title="interviewReport">
+    <ResponseField name="_id" type="string">
+      Unique identifier for the interview report.
+    </ResponseField>
+    
+    <ResponseField name="user" type="string">
+      User ID of the report owner.
+    </ResponseField>
+    
+    <ResponseField name="title" type="string">
+      Job title for the position.
+    </ResponseField>
+    
+    <ResponseField name="jobDescription" type="string">
+      The complete job description for the position.
+    </ResponseField>
+    
+    <ResponseField name="resume" type="string">
+      Full extracted text content from the candidate's resume.
+    </ResponseField>
+    
+    <ResponseField name="selfDescription" type="string">
+      Self-description provided by the candidate.
+    </ResponseField>
+    
+    <ResponseField name="matchScore" type="number">
+      A score between 0 and 100 indicating how well the candidate's profile matches the job description.
+    </ResponseField>
+    
+    <ResponseField name="technicalQuestions" type="array">
+      Array of technical questions with answers and intentions.
+      
+      <Expandable title="technicalQuestions[]">
+        <ResponseField name="question" type="string">
+          The technical question that can be asked in the interview.
+        </ResponseField>
+        
+        <ResponseField name="intention" type="string">
+          The intention of the interviewer behind asking this question.
+        </ResponseField>
+        
+        <ResponseField name="answer" type="string">
+          Detailed guidance on how to answer this question, what points to cover, and what approach to take.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="behavioralQuestions" type="array">
+      Array of behavioral questions with answers and intentions.
+      
+      <Expandable title="behavioralQuestions[]">
+        <ResponseField name="question" type="string">
+          The behavioral question that can be asked in the interview.
+        </ResponseField>
+        
+        <ResponseField name="intention" type="string">
+          The intention of the interviewer behind asking this question.
+        </ResponseField>
+        
+        <ResponseField name="answer" type="string">
+          Detailed guidance on how to answer this question effectively.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="skillGaps" type="array">
+      List of identified skill gaps with severity levels.
+      
+      <Expandable title="skillGaps[]">
+        <ResponseField name="skill" type="string">
+          The skill which the candidate is lacking.
+        </ResponseField>
+        
+        <ResponseField name="severity" type="string">
+          The severity level: `"low"`, `"medium"`, or `"high"`. Indicates the importance of this skill for the job.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="preparationPlan" type="array">
+      Day-by-day preparation plan for interview preparation.
+      
+      <Expandable title="preparationPlan[]">
+        <ResponseField name="day" type="number">
+          The day number in the preparation plan, starting from 1.
+        </ResponseField>
+        
+        <ResponseField name="focus" type="string">
+          The main focus area for this day (e.g., "React fundamentals", "System design").
+        </ResponseField>
+        
+        <ResponseField name="tasks" type="array">
+          Array of specific tasks to complete on this day.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp when the report was created.
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp when the report was last updated.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Success Response (200 OK)
+
+```json
+{
+  "message": "Interview report fetched successfully.",
+  "interviewReport": {
+    "_id": "507f1f77bcf86cd799439011",
+    "user": "507f191e810c19729de860ea",
+    "title": "Senior Software Engineer",
+    "jobDescription": "We are looking for a Senior Software Engineer with 5+ years of experience in React and Node.js. The ideal candidate will have strong problem-solving skills and experience with modern web technologies...",
+    "resume": "John Doe\nSenior Software Engineer\nEmail: john.doe@example.com\nPhone: (555) 123-4567\n\nEXPERIENCE\n\nSoftware Engineer at Tech Corp (2018-Present)\n- Led development of React-based frontend applications\n- Implemented RESTful APIs using Node.js and Express\n...",
+    "selfDescription": "I am a passionate full-stack developer with 6 years of experience building scalable web applications. I specialize in React, Node.js, and modern JavaScript frameworks...",
+    "matchScore": 85,
+    "technicalQuestions": [
+      {
+        "question": "Can you explain the virtual DOM in React and how it improves performance?",
+        "intention": "To assess understanding of React's core concepts and performance optimization strategies",
+        "answer": "The virtual DOM is a lightweight JavaScript representation of the actual DOM. React uses it to minimize expensive DOM operations by: 1) Creating a virtual representation of the UI, 2) Computing differences (diffing) when state changes, 3) Batch updating only the changed elements. This approach significantly improves performance by reducing direct DOM manipulations."
+      },
+      {
+        "question": "How would you handle authentication in a Node.js application?",
+        "intention": "To evaluate knowledge of security best practices and backend architecture",
+        "answer": "I would implement JWT-based authentication with the following approach: 1) Use bcrypt for password hashing, 2) Generate JWT tokens on successful login, 3) Implement middleware to verify tokens on protected routes, 4) Store tokens securely on the client (httpOnly cookies or secure storage), 5) Implement refresh token mechanism for long-lived sessions, 6) Add rate limiting to prevent brute force attacks."
+      }
+    ],
+    "behavioralQuestions": [
+      {
+        "question": "Tell me about a time when you had to work with a difficult team member.",
+        "intention": "To evaluate interpersonal skills, conflict resolution abilities, and professionalism",
+        "answer": "Use the STAR method: Situation - Describe the context briefly. Task - Explain what needed to be accomplished. Action - Detail the steps you took to address the situation, focusing on communication and empathy. Result - Share the positive outcome and what you learned. Keep the tone professional and focus on problem-solving rather than blame."
+      },
+      {
+        "question": "Describe a project where you had to learn a new technology quickly.",
+        "intention": "To assess adaptability, learning ability, and initiative",
+        "answer": "Structure your answer to demonstrate: 1) Your learning approach (documentation, tutorials, hands-on practice), 2) How you applied the new technology to solve a real problem, 3) Challenges you faced and how you overcame them, 4) The successful outcome and how it benefited the project or team."
+      }
+    ],
+    "skillGaps": [
+      {
+        "skill": "Kubernetes",
+        "severity": "medium"
+      },
+      {
+        "skill": "GraphQL",
+        "severity": "low"
+      },
+      {
+        "skill": "System Design at Scale",
+        "severity": "high"
+      }
+    ],
+    "preparationPlan": [
+      {
+        "day": 1,
+        "focus": "React fundamentals and advanced concepts",
+        "tasks": [
+          "Review React hooks (useState, useEffect, useContext, useReducer)",
+          "Practice implementing custom hooks for reusable logic",
+          "Study React performance optimization (useMemo, useCallback, React.memo)",
+          "Review component lifecycle and modern patterns"
+        ]
+      },
+      {
+        "day": 2,
+        "focus": "Node.js and backend architecture",
+        "tasks": [
+          "Review REST API design principles and best practices",
+          "Study Express middleware and error handling patterns",
+          "Practice implementing authentication and authorization",
+          "Review database design and optimization techniques"
+        ]
+      },
+      {
+        "day": 3,
+        "focus": "System design basics",
+        "tasks": [
+          "Study common system design patterns (load balancing, caching, databases)",
+          "Practice designing a URL shortener or similar system",
+          "Review scalability concepts and trade-offs",
+          "Watch system design interview videos"
+        ]
+      },
+      {
+        "day": 4,
+        "focus": "Behavioral interview preparation",
+        "tasks": [
+          "Prepare STAR stories for common behavioral questions",
+          "Review your past projects and identify key achievements",
+          "Practice answering 'Tell me about yourself'",
+          "Prepare thoughtful questions to ask the interviewer"
+        ]
+      },
+      {
+        "day": 5,
+        "focus": "Mock interviews and final review",
+        "tasks": [
+          "Conduct a mock technical interview with a friend or online platform",
+          "Review your prepared answers and refine them",
+          "Practice coding problems on whiteboard or shared editor",
+          "Get good rest and prepare mentally for the interview"
+        ]
+      }
+    ],
+    "createdAt": "2026-03-03T10:30:00.000Z",
+    "updatedAt": "2026-03-03T10:30:00.000Z"
+  }
+}
+```
+
+## Error Responses
+
+### 404 Not Found
+
+Returned when the interview report with the specified ID doesn't exist or doesn't belong to the authenticated user.
+
+```json
+{
+  "message": "Interview report not found."
+}
+```
+
+### 401 Unauthorized
+
+Returned when the authentication token is missing or invalid.
+
+## Notes
+
+- The endpoint only returns reports that belong to the authenticated user (user-scoped access)
+- All fields of the interview report are included in the response, including the full resume text and job description
+- The report ID must be a valid MongoDB ObjectId format
