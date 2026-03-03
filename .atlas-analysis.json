@@ -1,0 +1,101 @@
+{
+  "projectType": "saas",
+  "projectName": "Resume Generator",
+  "projectDescription": "AI-powered resume and interview helper that generates tailored interview reports and professional resumes using Google Gemini AI.",
+  "theme": "almond",
+  "primaryColor": "#6366F1",
+  "lightColor": "#818CF8",
+  "darkColor": "#4F46E5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/authentication",
+              "features/interview-reports",
+              "features/resume-generation"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/environment-variables",
+              "configuration/database-setup",
+              "configuration/ai-setup"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/uploading-resumes",
+              "guides/generating-interview-reports",
+              "guides/generating-resume-pdfs"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "troubleshooting/common-issues",
+              "troubleshooting/mongodb-connection",
+              "troubleshooting/resume-parsing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/auth/register",
+              "api/auth/login",
+              "api/auth/logout",
+              "api/auth/get-me"
+            ]
+          },
+          {
+            "group": "Interview",
+            "pages": [
+              "api/interview/create-report",
+              "api/interview/get-report",
+              "api/interview/list-reports",
+              "api/interview/generate-pdf"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "User authentication with JWT and secure cookies",
+    "AI-powered interview report generation using Google Gemini",
+    "Resume parsing from PDF and DOCX files",
+    "Job-tailored resume PDF generation",
+    "Match score calculation between candidate and job description",
+    "Technical and behavioral interview question preparation",
+    "Skill gap analysis with severity levels",
+    "Day-wise interview preparation plans"
+  ],
+  "publicApiSurface": [
+    "POST /api/auth/register",
+    "POST /api/auth/login",
+    "GET /api/auth/logout",
+    "GET /api/auth/get-me",
+    "POST /api/interview/",
+    "GET /api/interview/report/:interviewId",
+    "GET /api/interview/",
+    "POST /api/interview/resume/pdf/:interviewReportId"
+  ]
+}
