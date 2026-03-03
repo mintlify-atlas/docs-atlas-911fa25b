@@ -7,25 +7,19 @@ Retrieve all interview reports for the authenticated user, sorted by creation da
 
 ## Authentication
 
-This endpoint requires authentication. Include the JWT token in the Authorization header:
-
-```
-Authorization: Bearer <token>
-```
+This endpoint requires authentication. The JWT token must be sent as an HTTP-only cookie named `token`. This is automatically handled by the browser after successful login.
 
 ## Example Request
 
 ```bash
 curl -X GET https://api.example.com/api/interview/ \
-  -H "Authorization: Bearer <token>"
+  -b "token=YOUR_JWT_TOKEN"
 ```
 
 ```javascript
 fetch('https://api.example.com/api/interview/', {
   method: 'GET',
-  headers: {
-    'Authorization': `Bearer ${token}`
-  }
+  credentials: 'include' // Important: Include cookies
 });
 ```
 

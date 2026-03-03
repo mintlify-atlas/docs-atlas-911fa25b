@@ -7,11 +7,7 @@ Generate a new interview report based on user self description, resume file (PDF
 
 ## Authentication
 
-This endpoint requires authentication. Include the JWT token in the Authorization header:
-
-```
-Authorization: Bearer <token>
-```
+This endpoint requires authentication. The JWT token must be sent as an HTTP-only cookie named `token`. This is automatically handled by the browser after successful login.
 
 ## Request Body
 
@@ -53,7 +49,7 @@ This endpoint accepts `multipart/form-data` with the following fields:
 
 ```bash
 curl -X POST https://api.example.com/api/interview/ \
-  -H "Authorization: Bearer <token>" \
+  -b "token=YOUR_JWT_TOKEN" \
   -F "jobDescription=We are looking for a Senior Software Engineer with 5+ years of experience in React and Node.js..." \
   -F "title=Senior Software Engineer" \
   -F "selfDescription=I am a full-stack developer with 6 years of experience..." \
@@ -69,9 +65,7 @@ formData.append('resume', fileInput.files[0]);
 
 fetch('https://api.example.com/api/interview/', {
   method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${token}`
-  },
+  credentials: 'include', // Important: Include cookies
   body: formData
 });
 ```

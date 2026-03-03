@@ -7,11 +7,7 @@ Generate a tailored resume PDF based on an existing interview report. The resume
 
 ## Authentication
 
-This endpoint requires authentication. Include the JWT token in the Authorization header:
-
-```
-Authorization: Bearer <token>
-```
+This endpoint requires authentication. The JWT token must be sent as an HTTP-only cookie named `token`. This is automatically handled by the browser after successful login.
 
 ## Path Parameters
 
@@ -23,16 +19,14 @@ Authorization: Bearer <token>
 
 ```bash
 curl -X POST https://api.example.com/api/interview/resume/pdf/507f1f77bcf86cd799439011 \
-  -H "Authorization: Bearer <token>" \
+  -b "token=YOUR_JWT_TOKEN" \
   --output resume.pdf
 ```
 
 ```javascript
 fetch('https://api.example.com/api/interview/resume/pdf/507f1f77bcf86cd799439011', {
   method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${token}`
-  }
+  credentials: 'include' // Important: Include cookies
 })
   .then(response => response.blob())
   .then(blob => {
